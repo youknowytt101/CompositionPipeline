@@ -22,6 +22,86 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.domElement.tabIndex = 0;
 document.body.appendChild(renderer.domElement);
 
+const selectionOutlineTarget = new THREE.WebGLRenderTarget(
+  window.innerWidth,
+  window.innerHeight,
+  {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    stencilBuffer: false
+  }
+);
+const selectionOutlineMaskScene = new THREE.Scene();
+const selectionOutlineMaskMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide
+});
+const selectionOutlineCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const selectionOutlineTexelSize = new THREE.Vector2(
+  1 / window.innerWidth,
+  1 / window.innerHeight
+);
+const selectionOutlineCompositeMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    maskTexture: { value: selectionOutlineTarget.texture },
+    texelSize: { value: selectionOutlineTexelSize },
+    outlineColor: { value: new THREE.Color(0xffc400) },
+    outlineWidth: { value: 2.5 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+
+    void main() {
+      vUv = uv;
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D maskTexture;
+    uniform vec2 texelSize;
+    uniform vec3 outlineColor;
+    uniform float outlineWidth;
+
+    varying vec2 vUv;
+
+    float maskSample(vec2 offset) {
+      return texture2D(maskTexture, vUv + offset).r;
+    }
+
+    void main() {
+      vec2 px = texelSize * outlineWidth;
+      vec2 halfPx = texelSize * max(outlineWidth * 0.5, 1.0);
+      float center = maskSample(vec2(0.0));
+      float neighbor = 0.0;
+
+      neighbor = max(neighbor, maskSample(vec2(px.x, 0.0)));
+      neighbor = max(neighbor, maskSample(vec2(-px.x, 0.0)));
+      neighbor = max(neighbor, maskSample(vec2(0.0, px.y)));
+      neighbor = max(neighbor, maskSample(vec2(0.0, -px.y)));
+      neighbor = max(neighbor, maskSample(vec2(px.x, px.y)));
+      neighbor = max(neighbor, maskSample(vec2(-px.x, px.y)));
+      neighbor = max(neighbor, maskSample(vec2(px.x, -px.y)));
+      neighbor = max(neighbor, maskSample(vec2(-px.x, -px.y)));
+      neighbor = max(neighbor, maskSample(vec2(halfPx.x, 0.0)));
+      neighbor = max(neighbor, maskSample(vec2(-halfPx.x, 0.0)));
+      neighbor = max(neighbor, maskSample(vec2(0.0, halfPx.y)));
+      neighbor = max(neighbor, maskSample(vec2(0.0, -halfPx.y)));
+
+      float outline = step(0.5, neighbor) * (1.0 - step(0.5, center));
+      gl_FragColor = vec4(outlineColor, outline);
+    }
+  `,
+  transparent: true,
+  depthTest: false,
+  depthWrite: false
+});
+const selectionOutlineCompositeScene = new THREE.Scene();
+selectionOutlineCompositeScene.add(
+  new THREE.Mesh(new THREE.PlaneGeometry(2, 2), selectionOutlineCompositeMaterial)
+);
+const selectionMaskMeshes = [];
+const previousClearColor = new THREE.Color();
+
 const ambientLight = new THREE.HemisphereLight(0xffffff, 0xd8d8d8, 1.6);
 scene.add(ambientLight);
 
@@ -121,6 +201,8 @@ const lookSensitivity = 0.003;
 const orbitSensitivity = 0.005;
 const lmbDollyScale = 0.012;
 const gridSnapSize = 1;
+const cubeSizeMeters = 1;
+const defaultAssetColor = 0x808080;
 const rotationSnapAngle = THREE.MathUtils.degToRad(15);
 const minCameraMoveSpeed = 1;
 const maxCameraMoveSpeed = 80;
@@ -130,10 +212,15 @@ let nextAssetId = 1;
 let selectedAsset = null;
 let cameraDragState = null;
 let pendingClick = null;
+let duplicateOnTransformDrag = false;
+let duplicatedTransformAsset = null;
 let isTransformDragging = false;
 let transformStart = null;
 let lastFrameTime = 0;
 let cameraMoveSpeed = 7;
+let activeTransformMode = "translate";
+let transformGizmoVisible = true;
+let selectionOutlineVisible = true;
 let yaw = 0;
 let pitch = 0;
 const undoStack = [];
@@ -142,21 +229,36 @@ const transformControls = new TransformControls(camera, renderer.domElement);
 transformControls.setMode("translate");
 transformControls.setSpace("world");
 transformControls.setSize(0.85);
-transformControls.setTranslationSnap(gridSnapSize);
+transformControls.setTranslationSnap(null);
 transformControls.setRotationSnap(rotationSnapAngle);
 transformControls.setScaleSnap(gridSnapSize);
 scene.add(transformControls);
 
 transformControls.addEventListener("change", render);
-transformControls.addEventListener("objectChange", render);
+transformControls.addEventListener("objectChange", () => {
+  if (selectedAsset && activeTransformMode === "translate") {
+    snapAssetPosition(selectedAsset);
+  }
+
+  render();
+});
 transformControls.addEventListener("mouseDown", () => {
   isTransformDragging = true;
+  duplicatedTransformAsset = duplicateOnTransformDrag && selectedAsset
+    ? duplicateAssetForTransform(selectedAsset)
+    : null;
+  duplicateOnTransformDrag = false;
   transformStart = selectedAsset ? captureTransform(selectedAsset) : null;
 });
 transformControls.addEventListener("mouseUp", () => {
   isTransformDragging = false;
 
-  if (selectedAsset && transformStart) {
+  if (duplicatedTransformAsset) {
+    pushUndo({
+      type: "duplicate",
+      asset: duplicatedTransformAsset
+    });
+  } else if (selectedAsset && transformStart) {
     const transformEnd = captureTransform(selectedAsset);
 
     if (!transformsMatch(transformStart, transformEnd)) {
@@ -169,6 +271,7 @@ transformControls.addEventListener("mouseUp", () => {
     }
   }
 
+  duplicatedTransformAsset = null;
   transformStart = null;
 });
 transformControls.addEventListener("dragging-changed", (event) => {
@@ -177,18 +280,19 @@ transformControls.addEventListener("dragging-changed", (event) => {
 
 function createCube() {
   const group = new THREE.Group();
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const geometry = new THREE.BoxGeometry(cubeSizeMeters, cubeSizeMeters, cubeSizeMeters);
   const mesh = new THREE.Mesh(
     geometry,
-    new THREE.MeshStandardMaterial({ color: 0x7aa7ff, roughness: 0.58 })
+    new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.58 })
   );
   const edges = new THREE.LineSegments(
     new THREE.EdgesGeometry(geometry),
     new THREE.LineBasicMaterial({ color: 0x1f1f1f, transparent: true, opacity: 0.38 })
   );
 
-  mesh.position.z = 0.5;
+  mesh.position.z = cubeSizeMeters / 2;
   edges.position.copy(mesh.position);
+  edges.userData.pickable = false;
   group.add(mesh, edges);
   return group;
 }
@@ -196,7 +300,7 @@ function createCube() {
 function createSphere() {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.55, 32, 18),
-    new THREE.MeshStandardMaterial({ color: 0xf2a64a, roughness: 0.62 })
+    new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.62 })
   );
 
   mesh.position.z = 0.55;
@@ -205,8 +309,8 @@ function createSphere() {
 
 function createCharacter() {
   const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7 });
-  const headMaterial = new THREE.MeshStandardMaterial({ color: 0x242424, roughness: 0.65 });
+  const material = new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.7 });
+  const headMaterial = new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.65 });
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.85, 6, 14), material);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 24, 16), headMaterial);
   const leftFoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.12), material);
@@ -267,6 +371,16 @@ function applyTransform(asset, transform) {
   asset.updateMatrixWorld(true);
 }
 
+function duplicateAssetForTransform(sourceAsset) {
+  const type = sourceAsset.userData.assetType;
+  const duplicate = markAsset(createAsset(type), type);
+
+  applyTransform(duplicate, captureTransform(sourceAsset));
+  scene.add(duplicate);
+  selectAsset(duplicate);
+  return duplicate;
+}
+
 function transformsMatch(first, second) {
   return (
     first.position.equals(second.position) &&
@@ -312,13 +426,30 @@ function restoreAsset(asset, index) {
   selectAsset(asset);
 }
 
-function snapToGrid(value) {
-  return Math.round(value / gridSnapSize) * gridSnapSize;
+function snapToGrid(value, offset = 0) {
+  return Math.round((value - offset) / gridSnapSize) * gridSnapSize + offset;
+}
+
+function getAssetGridOffset(assetOrType) {
+  const type = typeof assetOrType === "string"
+    ? assetOrType
+    : assetOrType.userData.assetType;
+
+  return type === "cube" ? cubeSizeMeters / 2 : 0;
+}
+
+function snapAssetPosition(asset) {
+  const gridOffset = getAssetGridOffset(asset);
+
+  asset.position.x = snapToGrid(asset.position.x, gridOffset);
+  asset.position.y = snapToGrid(asset.position.y, gridOffset);
+  asset.position.z = snapToGrid(asset.position.z);
 }
 
 function placeAsset(type, point) {
   const asset = markAsset(createAsset(type), type);
-  asset.position.set(snapToGrid(point.x), snapToGrid(point.y), 0);
+  asset.position.set(point.x, point.y, 0);
+  snapAssetPosition(asset);
   scene.add(asset);
   selectAsset(asset);
   pushUndo({ type: "create", asset });
@@ -356,6 +487,12 @@ function undoLastAction() {
     return true;
   }
 
+  if (action.type === "duplicate") {
+    removeAsset(action.asset);
+    render();
+    return true;
+  }
+
   if (action.type === "delete") {
     restoreAsset(action.asset, action.index);
     render();
@@ -377,11 +514,55 @@ function undoLastAction() {
 }
 
 function setTransformMode(mode) {
+  activeTransformMode = mode;
   transformControls.setMode(mode);
   transformButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.transformMode === mode);
   });
   render();
+}
+
+function rebuildSelectionOutlineMask() {
+  selectionOutlineMaskScene.clear();
+  selectionMaskMeshes.length = 0;
+
+  if (!selectedAsset || !selectionOutlineVisible) {
+    return;
+  }
+
+  selectedAsset.traverse((child) => {
+    if (!child.isMesh || child.userData.pickable === false) {
+      return;
+    }
+
+    const maskMesh = new THREE.Mesh(child.geometry, selectionOutlineMaskMaterial);
+    maskMesh.frustumCulled = false;
+    maskMesh.userData.source = child;
+    selectionOutlineMaskScene.add(maskMesh);
+    selectionMaskMeshes.push(maskMesh);
+  });
+}
+
+function syncSelectionOutlineMask() {
+  for (const maskMesh of selectionMaskMeshes) {
+    const source = maskMesh.userData.source;
+
+    source.updateWorldMatrix(true, false);
+    source.matrixWorld.decompose(
+      maskMesh.position,
+      maskMesh.quaternion,
+      maskMesh.scale
+    );
+    maskMesh.visible = source.visible;
+  }
+}
+
+function updateSelectionFeedback() {
+  const hasSelection = Boolean(selectedAsset);
+
+  transformControls.visible = hasSelection && transformGizmoVisible;
+  transformControls.enabled = hasSelection && transformGizmoVisible && !cameraDragState;
+  rebuildSelectionOutlineMask();
 }
 
 function selectAsset(asset) {
@@ -394,6 +575,7 @@ function selectAsset(asset) {
     transformControls.detach();
   }
 
+  updateSelectionFeedback();
   render();
 }
 
@@ -403,12 +585,49 @@ function getPointerFromEvent(event) {
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
+function getTransformPointerFromEvent(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    y: -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    button: event.button
+  };
+}
+
+function prepareTransformDuplicate(event) {
+  duplicateOnTransformDrag = false;
+
+  if (
+    event.button !== 0 ||
+    !event.altKey ||
+    !selectedAsset ||
+    !transformGizmoVisible ||
+    !transformControls.visible ||
+    !transformControls.enabled ||
+    cameraDragState ||
+    dragState
+  ) {
+    return;
+  }
+
+  transformControls.updateMatrixWorld(true);
+  transformControls.pointerHover(getTransformPointerFromEvent(event));
+  duplicateOnTransformDrag = transformControls.axis !== null;
+}
+
 function getAssetAtEvent(event) {
   getPointerFromEvent(event);
   raycaster.setFromCamera(pointer, camera);
 
   const hits = raycaster.intersectObjects(placedAssets, true);
-  return hits.find((hit) => hit.object.userData.assetRoot)?.object.userData.assetRoot ?? null;
+  const selectableHit = hits.find((hit) => (
+    hit.object.isMesh &&
+    hit.object.userData.pickable !== false &&
+    hit.object.userData.assetRoot
+  ));
+
+  return selectableHit?.object.userData.assetRoot ?? null;
 }
 
 function pickAsset(event, asset = getAssetAtEvent(event)) {
@@ -694,7 +913,7 @@ function finishCameraDrag(event) {
 
   releasePointerCapture(cameraDragState.pointerId);
   cameraDragState = null;
-  transformControls.enabled = true;
+  updateSelectionFeedback();
   renderer.domElement.style.cursor = "default";
 
   if (event) {
@@ -910,13 +1129,37 @@ function handleViewportPointerUp(event) {
 }
 
 function render() {
+  renderer.setRenderTarget(null);
   renderer.render(scene, camera);
+
+  if (!selectedAsset || !selectionOutlineVisible || selectionMaskMeshes.length === 0) {
+    return;
+  }
+
+  syncSelectionOutlineMask();
+  renderer.getClearColor(previousClearColor);
+  const previousClearAlpha = renderer.getClearAlpha();
+
+  renderer.setRenderTarget(selectionOutlineTarget);
+  renderer.setClearColor(0x000000, 0);
+  renderer.clear(true, true, true);
+  renderer.render(selectionOutlineMaskScene, camera);
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(previousClearColor, previousClearAlpha);
+  renderer.clearDepth();
+  const previousAutoClear = renderer.autoClear;
+
+  renderer.autoClear = false;
+  renderer.render(selectionOutlineCompositeScene, selectionOutlineCamera);
+  renderer.autoClear = previousAutoClear;
 }
 
 function resize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  selectionOutlineTarget.setSize(window.innerWidth, window.innerHeight);
+  selectionOutlineTexelSize.set(1 / window.innerWidth, 1 / window.innerHeight);
   render();
 }
 
@@ -1014,6 +1257,22 @@ function pressKey(event) {
   }
 
   if (!mouseButtons.right && selectedAsset) {
+    if (code === "keyq") {
+      event.preventDefault();
+      transformGizmoVisible = !transformGizmoVisible;
+      updateSelectionFeedback();
+      render();
+      return;
+    }
+
+    if (code === "keyg") {
+      event.preventDefault();
+      selectionOutlineVisible = !selectionOutlineVisible;
+      updateSelectionFeedback();
+      render();
+      return;
+    }
+
     if (code === "keyw") {
       event.preventDefault();
       setTransformMode("translate");
@@ -1079,6 +1338,7 @@ transformToolbar.addEventListener("click", (event) => {
     setTransformMode(button.dataset.transformMode);
   }
 });
+renderer.domElement.addEventListener("pointerdown", prepareTransformDuplicate, true);
 renderer.domElement.addEventListener("pointerdown", handleViewportPointerDown);
 renderer.domElement.addEventListener("pointermove", handleViewportPointerMove);
 renderer.domElement.addEventListener("pointerup", handleViewportPointerUp);
