@@ -25,9 +25,18 @@
       }
 
       :root {
-        --side-panel-width: 280px;
-        --right-panel-width: var(--side-panel-width);
+        --side-panel-width: 320px;
         --right-panel-collapsed-width: 52px;
+        --right-panel-default-width: 280px;
+        --right-panel-width: var(--right-panel-default-width);
+        --right-panel-column-width: calc(var(--right-panel-default-width) - var(--right-panel-collapsed-width));
+        --right-panel-expanded-width: calc(
+          var(--right-panel-collapsed-width) +
+          var(--right-panel-column-width) +
+          var(--right-panel-column-width) +
+          var(--right-panel-column-width) +
+          var(--right-panel-column-width)
+        );
         --editor-panel-bg: rgba(38, 38, 38, 0.96);
         --editor-panel-border: rgba(255, 255, 255, 0.12);
         --camera-preview-border-width: 3px;
@@ -50,6 +59,10 @@
         left: 0;
         width: var(--side-panel-width);
         border-right: 1px solid var(--editor-panel-border);
+      }
+
+      body.is-right-panel-wide {
+        --right-panel-width: var(--right-panel-expanded-width);
       }
 
       body.is-right-panel-collapsed {
@@ -133,6 +146,10 @@
         bottom: 0;
         left: 0;
         z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
         box-sizing: border-box;
         width: var(--right-panel-collapsed-width);
         padding: 8px 6px;
@@ -156,13 +173,40 @@
         color: #ffffff;
       }
 
+      .right-panel-content {
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        padding-left: var(--right-panel-collapsed-width);
+      }
+
       .camera-preview-list {
         display: flex;
         flex-direction: column;
         gap: 10px;
-        padding: 10px 10px 10px calc(var(--right-panel-collapsed-width) + 10px);
+        box-sizing: border-box;
+        min-width: 0;
+        padding: 10px;
       }
 
+      .right-panel-secondary-column {
+        display: none;
+        box-sizing: border-box;
+        min-width: 0;
+        padding: 10px;
+        border-left: 1px solid var(--editor-panel-border);
+      }
+
+      body.is-right-panel-wide .right-panel-content {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(var(--right-panel-column-width), 1fr));
+      }
+
+      body.is-right-panel-wide .right-panel-secondary-column {
+        display: block;
+      }
+
+      body.is-right-panel-collapsed .right-panel-content,
       body.is-right-panel-collapsed .camera-preview-list {
         display: none;
       }
@@ -467,9 +511,36 @@
             aria-expanded="true"
           ></sl-icon-button>
         </sl-tooltip>
+        <sl-tooltip content="统一展开" placement="left">
+          <sl-icon-button
+            id="right-panel-wide-toggle"
+            class="right-panel-toggle"
+            name="chevron-double-left"
+            data-panel-tool="toggle-right-panel-width"
+            label="统一展开"
+            aria-pressed="false"
+          ></sl-icon-button>
+        </sl-tooltip>
       </div>
-      <div id="camera-preview-list" class="camera-preview-list" aria-label="captured camera previews"></div>
+      <div id="right-panel-content" class="right-panel-content">
+        <div id="camera-preview-list" class="camera-preview-list" aria-label="captured camera previews"></div>
+        <div
+          id="right-panel-secondary-column"
+          class="right-panel-secondary-column"
+          aria-label="secondary right panel"
+        ></div>
+        <div
+          id="right-panel-tertiary-column"
+          class="right-panel-secondary-column"
+          aria-label="tertiary right panel"
+        ></div>
+        <div
+          id="right-panel-quaternary-column"
+          class="right-panel-secondary-column"
+          aria-label="quaternary right panel"
+        ></div>
+      </div>
     </aside>
-    <script type="module" src="/app.js?v=road-drawing-pointer"></script>
+    <script type="module" src="/app.js?v=right-panel-wide"></script>
   </body>
 </html>

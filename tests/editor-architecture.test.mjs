@@ -31,7 +31,7 @@ assertNoFile("public/src/shortcut-panel.js");
 assertNoFile("public/src/shortcuts.js");
 
 const app = read("public/app.js");
-assert.match(app, /import\s+\{\s*createEditor\s*\}\s+from\s+["']\.\/src\/editor\.js\?v=road-drawing-pointer["']/);
+assert.match(app, /import\s+\{\s*createEditor\s*\}\s+from\s+["']\.\/src\/editor\.js\?v=right-panel-wide["']/);
 assert.doesNotMatch(app, /shortcut-panel/);
 assert.doesNotMatch(app, /shortcutSections/);
 assert.doesNotMatch(app, /mountShortcutPanel/);
@@ -42,7 +42,7 @@ const index = read("public/index.html");
 assert.match(index, /sl-theme-dark/);
 assert.match(index, /@shoelace-style\/shoelace@2\.20\.1\/cdn\/themes\/dark\.css/);
 assert.match(index, /@shoelace-style\/shoelace@2\.20\.1\/cdn\/shoelace-autoloader\.js/);
-assert.match(index, /<script type="module" src="\/app\.js\?v=road-drawing-pointer"><\/script>/);
+assert.match(index, /<script type="module" src="\/app\.js\?v=right-panel-wide"><\/script>/);
 assert.match(index, /<sl-tooltip[^>]+content="Cube"/);
 assert.match(index, /<sl-icon-button[^>]+data-asset="cube"/);
 assert.match(index, /<sl-tooltip[^>]+content="Road"/);
@@ -76,19 +76,36 @@ assert.match(index, /aspect-ratio:\s*var\(--runtime-aspect-ratio\)/);
 assert.match(index, /right:\s*var\(--right-panel-width\)/);
 assert.match(index, /left:\s*var\(--side-panel-width\)/);
 assert.match(index, /box-shadow:\s*0\s+0\s+0\s+100vmax\s+rgba\(0,\s*0,\s*0,\s*0\.62\)/);
-assert.match(index, /--side-panel-width:\s*280px/);
-assert.match(index, /--right-panel-width:\s*var\(--side-panel-width\)/);
+assert.match(index, /--side-panel-width:\s*320px/);
 assert.match(index, /--right-panel-collapsed-width:\s*52px/);
+assert.match(index, /--right-panel-default-width:\s*280px/);
+assert.match(index, /--right-panel-width:\s*var\(--right-panel-default-width\)/);
+assert.match(
+  index,
+  /--right-panel-column-width:\s*calc\(var\(--right-panel-default-width\)\s*-\s*var\(--right-panel-collapsed-width\)\)/,
+  "Right panel wide mode should preserve the default content column width"
+);
+assert.match(
+  index,
+  /--right-panel-expanded-width:\s*calc\(\s*var\(--right-panel-collapsed-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\)/,
+  "Expanded right panel width should fit four default-width columns plus the rail"
+);
 assert.match(index, /--runtime-aspect-ratio:\s*calc\(16\s*\/\s*9\)/);
 assert.match(index, /id="left-ui-panel"/);
 assert.match(index, /id="right-ui-panel"/);
 assert.match(index, /id="right-panel-rail"/);
 assert.match(index, /id="right-panel-toggle"/);
+assert.match(index, /id="right-panel-wide-toggle"/);
 assert.match(index, /data-panel-tool="toggle-right-panel"/);
+assert.match(index, /data-panel-tool="toggle-right-panel-width"/);
+assert.match(index, /<sl-tooltip[^>]+content="统一展开"[^>]*>[\s\S]*id="right-panel-wide-toggle"/);
+assert.match(index, /<sl-icon-button[^>]+id="right-panel-wide-toggle"[^>]+label="统一展开"/);
 assert.match(index, /aria-expanded="true"/);
+assert.match(index, /aria-pressed="false"/);
 assert.match(index, /class="right-panel-rail"/);
 assert.match(index, /\.right-panel-rail\s*\{/);
 assert.match(index, /\.right-panel-toggle::part\(base\)/);
+assert.match(index, /body\.is-right-panel-wide\s*\{[\s\S]*--right-panel-width:\s*var\(--right-panel-expanded-width\)/);
 assert.match(index, /body\.is-right-panel-collapsed\s*\{[\s\S]*--right-panel-width:\s*var\(--right-panel-collapsed-width\)/);
 assert.match(index, /body\.is-right-panel-collapsed\s+\.camera-preview-list\s*\{[\s\S]*display:\s*none/);
 assert.match(index, /id="camera-preview-list"/);
@@ -117,7 +134,23 @@ assert.doesNotMatch(
 assert.match(index, /\.left-ui-panel,\s*[\s\S]*\.right-ui-panel\s*\{/);
 assert.match(index, /\.left-ui-panel\s*\{/);
 assert.match(index, /\.right-ui-panel/);
+assert.match(index, /id="right-panel-content"/);
+assert.match(index, /class="right-panel-content"/);
 assert.match(index, /\.camera-preview-list/);
+assert.match(index, /id="right-panel-secondary-column"/);
+assert.match(index, /class="right-panel-secondary-column"/);
+assert.match(index, /id="right-panel-tertiary-column"/);
+assert.match(index, /id="right-panel-quaternary-column"/);
+assert.match(
+  index,
+  /body\.is-right-panel-wide\s+\.right-panel-content\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*repeat\(4,\s*minmax\(var\(--right-panel-column-width\),\s*1fr\)\)/,
+  "Wide right panel should split into four columns without shrinking the default column width"
+);
+assert.doesNotMatch(
+  index,
+  /body\.is-right-panel-wide\s+\.camera-preview-list\s*\{[\s\S]*grid-template-columns/,
+  "Captured camera previews should stay in their own single-column container"
+);
 assert.match(index, /\.camera-preview-card/);
 assert.match(index, /--preview-aspect-ratio/);
 assert.doesNotMatch(index, /\.camera-preview-card\s*\{[\s\S]*aspect-ratio:\s*16\s*\/\s*9/);
@@ -188,6 +221,7 @@ assert.doesNotMatch(editor, /from\s+["']\.\/shortcuts\.js["']/);
 assert.match(editor, /const\s+runButton\s*=\s*document\.querySelector\(\s*["']\[data-system-tool="run"\]["']\s*\)/);
 assert.match(editor, /const\s+roadButton\s*=\s*document\.querySelector\(\s*["']\[data-system-tool="road"\]["']\s*\)/);
 assert.match(editor, /const\s+rightPanelToggleButton\s*=\s*document\.querySelector\(\s*["']#right-panel-toggle["']\s*\)/);
+assert.match(editor, /const\s+rightPanelWideToggleButton\s*=\s*document\.querySelector\(\s*["']#right-panel-wide-toggle["']\s*\)/);
 assert.match(editor, /const\s+cameraSpeedInput\s*=\s*document\.querySelector\(\s*["']#camera-speed-input["']\s*\)/);
 assert.match(editor, /const\s+cameraSettings\s*=\s*\{\s*\.\.\.DEFAULT_CAMERA_SETTINGS\s*\}/);
 assert.match(editor, /function\s+getRuntimeAspect/);
@@ -208,6 +242,8 @@ assert.match(editor, /function\s+setRuntimeAspect/);
 assert.match(editor, /function\s+updateCameraSpeedControl/);
 assert.match(editor, /function\s+setCameraMoveSpeed/);
 assert.match(editor, /function\s+setRightPanelCollapsed\(collapsed\)/);
+assert.match(editor, /let\s+rightPanelWide\s*=\s*false/);
+assert.match(editor, /function\s+setRightPanelWide\(wide\)/);
 assert.match(editor, /const\s+roadTiles\s*=\s*new\s+Map\(\)/);
 assert.match(editor, /let\s+roadDrawingMode\s*=\s*false/);
 assert.match(editor, /let\s+roadDrawing\s*=\s*false/);
@@ -219,14 +255,55 @@ assert.match(editor, /new\s+THREE\.PlaneGeometry\(gridSnapSize,\s*gridSnapSize\)
 assert.match(editor, /new\s+THREE\.MeshBasicMaterial\(\{\s*color:\s*0xff0000/);
 assert.match(editor, /roadTile\.position\.set\(\s*\(cell\.x\s*\+\s*0\.5\)\s*\*\s*gridSnapSize,\s*\(cell\.y\s*\+\s*0\.5\)\s*\*\s*gridSnapSize,\s*0\.02\s*\)/);
 assert.match(editor, /roadTile\.userData\.pickable\s*=\s*false/);
+assert.match(editor, /let\s+roadDrawingTiles\s*=\s*\[\]/);
+assert.match(
+  editor,
+  /function\s+recordRoadTile\(point\)[\s\S]*paintRoadAtPoint\(point\)[\s\S]*roadDrawingTiles\.push\(paintedTile\)/,
+  "Road drawing should collect newly painted tiles for one undoable stroke"
+);
+assert.match(
+  editor,
+  /function\s+endRoadDrawing\(\)[\s\S]*pushUndo\(\{\s*type:\s*["']road-draw["'],\s*tiles:\s*\[\.\.\.roadDrawingTiles\]\s*\}\)/,
+  "Ending a road stroke should add the painted tiles to the undo stack"
+);
+assert.match(
+  editor,
+  /if\s*\(action\.type\s*===\s*["']road-draw["']\)[\s\S]*scene\.remove\(tile\.mesh\)[\s\S]*roadTiles\.delete\(tile\.key\)/,
+  "Undoing a road stroke should remove its road meshes and clear their occupied cells"
+);
 assert.match(editor, /function\s+setRoadDrawingMode\(active\)/);
 assert.match(editor, /roadButton\?\.classList\.toggle\(\s*["']is-active["'],\s*roadDrawingMode\s*\)/);
+assert.match(editor, /function\s+cancelRoadDrawingMode\(\)\s*\{[\s\S]*setRoadDrawingMode\(false\)[\s\S]*\}/);
+assert.match(
+  editor,
+  /const\s+button\s*=\s*event\.target\.closest\(\s*["']\[data-asset\]["']\s*\)[\s\S]*if\s*\(!button\s*\|\|[\s\S]*return;[\s\S]*cancelRoadDrawingMode\(\);[\s\S]*dragState\s*=\s*\{/,
+  "Starting any asset drag should cancel the road tool"
+);
+assert.match(
+  editor,
+  /transformToolbar\.addEventListener\(\s*["']click["'],[\s\S]*if\s*\(button\)\s*\{[\s\S]*cancelRoadDrawingMode\(\);[\s\S]*setTransformMode\(button\.dataset\.transformMode\)/,
+  "Choosing a transform tool should cancel the road tool"
+);
+assert.match(
+  editor,
+  /runButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{[\s\S]*cancelRoadDrawingMode\(\);[\s\S]*togglePlayMode\(\);[\s\S]*\}\s*\)/,
+  "Entering another toolbar mode such as Run should cancel the road tool"
+);
 assert.match(editor, /function\s+beginRoadDrawing\(event\)/);
 assert.match(editor, /function\s+continueRoadDrawing\(event\)/);
 assert.match(editor, /function\s+endRoadDrawing\(\)/);
 assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-right-panel-collapsed["'],\s*rightPanelCollapsed\s*\)/);
 assert.match(editor, /rightPanelToggleButton\?\.setAttribute\(\s*["']aria-expanded["'],\s*`\$\{!rightPanelCollapsed\}`\s*\)/);
 assert.match(editor, /rightPanelToggleButton\.name\s*=\s*rightPanelCollapsed\s*\?\s*["']chevron-left["']\s*:\s*["']chevron-right["']/);
+assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-right-panel-wide["'],\s*rightPanelWide\s*\)/);
+assert.match(editor, /rightPanelWideToggleButton\?\.setAttribute\(\s*["']aria-pressed["'],\s*`\$\{rightPanelWide\}`\s*\)/);
+assert.match(editor, /const\s+nextLabel\s*=\s*rightPanelWide\s*\?\s*["']统一收起["']\s*:\s*["']统一展开["']/);
+assert.match(editor, /const\s+nextIcon\s*=\s*rightPanelWide\s*\?\s*["']chevron-double-right["']\s*:\s*["']chevron-double-left["']/);
+assert.match(editor, /rightPanelWideToggleButton\.name\s*=\s*nextIcon/);
+assert.match(editor, /rightPanelWideToggleButton\.label\s*=\s*nextLabel/);
+assert.match(editor, /rightPanelWideToggleButton\.setAttribute\(\s*["']name["'],\s*nextIcon\s*\)/);
+assert.match(editor, /rightPanelWideToggleButton\.setAttribute\(\s*["']label["'],\s*nextLabel\s*\)/);
+assert.match(editor, /rightPanelWideToggleButton\.closest\(\s*["']sl-tooltip["']\s*\)\?\.setAttribute\(\s*["']content["'],\s*nextLabel\s*\)/);
 assert.match(editor, /requestAnimationFrame\(resize\)/);
 assert.match(editor, /fovRange\?\.addEventListener\(\s*["']input["']/);
 assert.doesNotMatch(
@@ -268,6 +345,7 @@ assert.match(editor, /cameraSpeedInput\?\.addEventListener\(\s*["']input["'],\s*
 assert.match(editor, /cameraSpeedInput\?\.addEventListener\(\s*["']change["'],\s*\(\)\s*=>\s*\{/);
 assert.match(editor, /setCameraMoveSpeed\(cameraSpeedInput\.value\)/);
 assert.match(editor, /rightPanelToggleButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{/);
+assert.match(editor, /rightPanelWideToggleButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{/);
 assert.match(editor, /function\s+togglePlayMode/);
 assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-playing["'],\s*playing\s*\)/);
 assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-playing["'],\s*playing\s*\)[\s\S]*updateSelectionFeedback\(\);[\s\S]*render\(\);[\s\S]*if\s*\(playing\)/);
@@ -275,7 +353,10 @@ assert.match(editor, /playMode\.handleKeyDown\(event\)/);
 assert.match(editor, /playMode\.handleKeyUp\(event\)/);
 assert.match(editor, /playMode\.handlePointerMove\(event\)/);
 assert.match(editor, /playMode\.update\(deltaTime\)/);
-assert.match(editor, /runButton\?\.addEventListener\(\s*["']click["'],\s*togglePlayMode\s*\)/);
+assert.match(
+  editor,
+  /runButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{[\s\S]*cancelRoadDrawingMode\(\);[\s\S]*togglePlayMode\(\);[\s\S]*\}\s*\)/
+);
 assert.match(editor, /event\.target\.closest\(\s*["']\[data-system-tool="road"\]["']\s*\)/);
 assert.match(editor, /const\s+cameraPreviewList\s*=\s*document\.querySelector\(\s*["']#camera-preview-list["']\s*\)/);
 assert.match(editor, /const\s+capturedCameraPreviews\s*=\s*\[\]/);

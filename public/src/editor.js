@@ -163,6 +163,7 @@ export function createEditor() {
   const runButton = document.querySelector('[data-system-tool="run"]');
   const roadButton = document.querySelector('[data-system-tool="road"]');
   const rightPanelToggleButton = document.querySelector("#right-panel-toggle");
+  const rightPanelWideToggleButton = document.querySelector("#right-panel-wide-toggle");
   const playViewportFrame = document.querySelector("#play-viewport-frame");
   const fovRange = document.querySelector("#camera-fov-range");
   const fovValue = document.querySelector("#camera-fov-value");
@@ -197,8 +198,10 @@ export function createEditor() {
   let transformGizmoVisible = true;
   let selectionOutlineVisible = true;
   let rightPanelCollapsed = false;
+  let rightPanelWide = false;
   let roadDrawingMode = false;
   let roadDrawing = false;
+  let roadDrawingTiles = [];
   const undoStack = [];
 
   const transformControls = new TransformControls(camera, renderer.domElement);
@@ -457,6 +460,26 @@ export function createEditor() {
     requestAnimationFrame(resize);
   }
 
+  function setRightPanelWide(wide) {
+    rightPanelWide = Boolean(wide);
+    document.body.classList.toggle("is-right-panel-wide", rightPanelWide);
+    rightPanelWideToggleButton?.setAttribute("aria-pressed", `${rightPanelWide}`);
+
+    if (rightPanelWideToggleButton) {
+      const nextLabel = rightPanelWide ? "统一收起" : "统一展开";
+      const nextIcon = rightPanelWide ? "chevron-double-right" : "chevron-double-left";
+
+      rightPanelWideToggleButton.classList.toggle("is-active", rightPanelWide);
+      rightPanelWideToggleButton.name = nextIcon;
+      rightPanelWideToggleButton.label = nextLabel;
+      rightPanelWideToggleButton.setAttribute("name", nextIcon);
+      rightPanelWideToggleButton.setAttribute("label", nextLabel);
+      rightPanelWideToggleButton.closest("sl-tooltip")?.setAttribute("content", nextLabel);
+    }
+
+    requestAnimationFrame(resize);
+  }
+
   function getRoadCellFromPoint(point) {
     return {
       x: Math.floor(point.x / gridSnapSize),
@@ -469,7 +492,7 @@ export function createEditor() {
     const key = `${cell.x}:${cell.y}`;
 
     if (roadTiles.has(key)) {
-      return false;
+      return null;
     }
 
     const roadTile = new THREE.Mesh(
@@ -486,13 +509,30 @@ export function createEditor() {
     scene.add(roadTile);
     roadTiles.set(key, roadTile);
     render();
-    return true;
+    return { key, mesh: roadTile };
+  }
+
+  function recordRoadTile(point) {
+    const paintedTile = paintRoadAtPoint(point);
+
+    if (paintedTile) {
+      roadDrawingTiles.push(paintedTile);
+    }
+
+    return paintedTile;
   }
 
   function setRoadDrawingMode(active) {
     roadDrawingMode = Boolean(active);
     roadButton?.classList.toggle("is-active", roadDrawingMode);
     roadDrawing = false;
+    roadDrawingTiles = [];
+  }
+
+  function cancelRoadDrawingMode() {
+    if (roadDrawingMode) {
+      setRoadDrawingMode(false);
+    }
   }
 
   function beginRoadDrawing(event) {
@@ -508,7 +548,8 @@ export function createEditor() {
 
     event.preventDefault();
     roadDrawing = true;
-    paintRoadAtPoint(point);
+    roadDrawingTiles = [];
+    recordRoadTile(point);
     return true;
   }
 
@@ -522,14 +563,24 @@ export function createEditor() {
     event.preventDefault();
 
     if (point) {
-      paintRoadAtPoint(point);
+      recordRoadTile(point);
     }
 
     return true;
   }
 
   function endRoadDrawing() {
+    if (!roadDrawing) {
+      return;
+    }
+
     roadDrawing = false;
+
+    if (roadDrawingTiles.length > 0) {
+      pushUndo({ type: "road-draw", tiles: [...roadDrawingTiles] });
+    }
+
+    roadDrawingTiles = [];
   }
 
   function copyCameraState(targetCamera, sourceCamera) {
@@ -857,6 +908,15 @@ export function createEditor() {
       return true;
     }
 
+    if (action.type === "road-draw") {
+      action.tiles.forEach((tile) => {
+        scene.remove(tile.mesh);
+        roadTiles.delete(tile.key);
+      });
+      render();
+      return true;
+    }
+
     return false;
   }
 
@@ -1082,6 +1142,7 @@ export function createEditor() {
     }
 
     event.preventDefault();
+    cancelRoadDrawingMode();
     dragState = {
       type: button.dataset.asset,
       pointerId: event.pointerId,
@@ -1397,6 +1458,7 @@ export function createEditor() {
     const button = event.target.closest("[data-transform-mode]");
 
     if (button) {
+      cancelRoadDrawingMode();
       setTransformMode(button.dataset.transformMode);
     }
   });
@@ -1424,7 +1486,13 @@ export function createEditor() {
   rightPanelToggleButton?.addEventListener("click", () => {
     setRightPanelCollapsed(!rightPanelCollapsed);
   });
-  runButton?.addEventListener("click", togglePlayMode);
+  rightPanelWideToggleButton?.addEventListener("click", () => {
+    setRightPanelWide(!rightPanelWide);
+  });
+  runButton?.addEventListener("click", () => {
+    cancelRoadDrawingMode();
+    togglePlayMode();
+  });
   renderer.domElement.addEventListener("pointerdown", prepareTransformDuplicate, true);
   renderer.domElement.addEventListener("pointerdown", (event) => {
     if (isPlayModeActive()) {
