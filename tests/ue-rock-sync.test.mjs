@@ -327,8 +327,9 @@ const fakeObject = {
   }
 };
 const fakeThree = {
-  MeshStandardMaterial: class {
+  MeshToonMaterial: class {
     constructor(options) {
+      this.type = "MeshToonMaterial";
       this.options = options;
     }
   }
@@ -358,10 +359,11 @@ assert.equal(normalsRecomputed, true);
 assert.equal(sourceDisposed, true);
 assert.equal(workingGeometryDisposed, true);
 assert.equal(mesh.material.options.color, 0x9b9b9b);
-assert.equal(mesh.material.options.roughness, 0.92);
+assert.equal(mesh.material.type, "MeshToonMaterial");
+assert.equal(mesh.material.options.gradientMap.kind, "toon-gradient");
 assert.notEqual(mesh.userData.pickable, false);
 assert.equal(mesh.castShadow, true);
-assert.equal(mesh.receiveShadow, true);
+assert.equal(mesh.receiveShadow, false);
 
 function makeTransformNode() {
   return {
@@ -441,7 +443,7 @@ const fakeControllerThree = {
       return makeGroup();
     }
   },
-  MeshStandardMaterial: fakeThree.MeshStandardMaterial
+  MeshToonMaterial: fakeThree.MeshToonMaterial
 };
 const fakeLoader = {
   load(_url, resolve) {
@@ -524,6 +526,8 @@ assert.equal(controller.getDisplayMode(), "gray");
 controller.setDisplayMode("semanticColor");
 assert.equal(controller.getDisplayMode(), "semanticColor");
 assert.equal(syncedChildMesh.material.options.color, "#d18b4b");
+assert.equal(syncedChildMesh.material.type, "MeshToonMaterial");
+assert.equal(syncedChildMesh.material.options.gradientMap.kind, "toon-gradient");
 controller.setDisplayMode("gray");
 assert.equal(syncedChildMesh.material.options.color, 0x9b9b9b);
 

@@ -24,6 +24,60 @@ events.addEventListener("reload", () => location.reload());
 """
 
 
+INIT_UNREAL_TEMPLATE = r'''
+import importlib.util
+import sys
+from pathlib import Path
+
+import unreal
+
+
+PLUGIN_PYTHON_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_PYTHON_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_PYTHON_DIR))
+
+
+MENU_OWNER = "CompositionPipelineExporter"
+MENU_NAME = "CompositionPipeline.ExportSelectedSceneProxies"
+
+
+def export_selected_scene_proxies():
+    module_path = PLUGIN_PYTHON_DIR / "sync_selected_static_mesh_rocks.py"
+    spec = importlib.util.spec_from_file_location("composition_pipeline_exporter_runtime", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load CompositionPipeline exporter script: {module_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    module.sync_selected_static_mesh_rocks()
+
+
+def register_menu():
+    menus = unreal.ToolMenus.get()
+    main_menu = menus.extend_menu("LevelEditor.MainMenu.Tools")
+    section = main_menu.find_or_add_section("CompositionPipeline", "Composition Pipeline")
+    entry = unreal.ToolMenuEntry(
+        name=MENU_NAME,
+        type=unreal.MultiBlockType.MENU_ENTRY,
+        insert_position=unreal.ToolMenuInsert("", unreal.ToolMenuInsertType.DEFAULT),
+    )
+
+    entry.set_label("Export Selected Scene Proxies")
+    entry.set_tool_tip("Export selected Unreal actors as CompositionPipeline scene proxy data.")
+    entry.set_string_command(
+        unreal.ToolMenuStringCommandType.PYTHON,
+        "",
+        "import importlib, init_unreal; importlib.reload(init_unreal); init_unreal.export_selected_scene_proxies()",
+    )
+    section.add_entry(entry)
+    menus.refresh_all_widgets()
+
+
+register_menu()
+'''.lstrip()
+
+
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -265,6 +319,123 @@ def build_environment_check():
     }
 
 
+def make_deploy_check(check_id, label, status, message, details=None, command=None):
+    return make_check(check_id, label, status, message, details, command)
+
+
+def build_ue_export_plugin_files(output_root):
+    normalized_output = str(output_root).replace("\\", "/")
+    exporter_path = ROOT / "tools" / "unreal" / "sync_selected_static_mesh_rocks.py"
+    exporter_source = exporter_path.read_text(encoding="utf-8")
+    exporter_config = {
+        "outputRoot": normalized_output,
+    }
+    plugin_manifest = {
+        "FileVersion": 3,
+        "Version": 1,
+        "VersionName": "1.0.0",
+        "FriendlyName": "Composition Pipeline Exporter",
+        "Description": "Exports selected Unreal scene proxies for CompositionPipeline.",
+        "Category": "Editor",
+        "CanContainContent": True,
+        "EnabledByDefault": True,
+        "Modules": [],
+    }
+
+    return {
+        "CompositionPipelineExporter.uplugin": json.dumps(plugin_manifest, indent=2) + "\n",
+        "Content/Python/init_unreal.py": INIT_UNREAL_TEMPLATE,
+        "Content/Python/composition_pipeline_config.json": json.dumps(exporter_config, indent=2) + "\n",
+        "Content/Python/sync_selected_static_mesh_rocks.py": exporter_source,
+    }
+
+
+def deploy_ue_export_tools(uproject_path):
+    raw_path = str(uproject_path or "").strip().strip('"')
+    checks = []
+
+    if not raw_path:
+        checks.append(make_deploy_check(
+            "uproject-path",
+            "UE project path",
+            "error",
+            "Paste the current Unreal project's .uproject path.",
+        ))
+        return {"ok": False, "summary": "UE project path is required", "checks": checks}
+
+    uproject = Path(raw_path).expanduser()
+    if not uproject.exists():
+        checks.append(make_deploy_check(
+            "uproject-path",
+            "UE project path",
+            "error",
+            "The .uproject file does not exist.",
+            str(uproject),
+        ))
+        return {"ok": False, "summary": "UE project path was not found", "checks": checks}
+
+    if uproject.suffix.lower() != ".uproject" or not uproject.is_file():
+        checks.append(make_deploy_check(
+            "uproject-path",
+            "UE project path",
+            "error",
+            "The deployment target must be a .uproject file.",
+            str(uproject),
+        ))
+        return {"ok": False, "summary": "UE project path must be a .uproject file", "checks": checks}
+
+    project_dir = uproject.resolve().parent
+    plugin_dir = (project_dir / "Plugins" / "CompositionPipelineExporter").resolve()
+    plugin_files = build_ue_export_plugin_files(PUBLIC_DIR / "ue-sync")
+
+    try:
+        for relative_path, contents in plugin_files.items():
+            target = (plugin_dir / relative_path).resolve()
+            if not target.is_relative_to(plugin_dir):
+                raise ValueError(f"Refusing to write outside plugin directory: {target}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(contents, encoding="utf-8")
+    except OSError as error:
+        checks.append(make_deploy_check(
+            "plugin-files",
+            "Plugin files",
+            "error",
+            "Failed to write CompositionPipelineExporter plugin files.",
+            str(error),
+        ))
+        return {"ok": False, "summary": "UE export tool deployment failed", "checks": checks}
+
+    checks.append(make_deploy_check(
+        "uproject-path",
+        "UE project path",
+        "ok",
+        "Deployment target is a valid Unreal project.",
+        str(uproject.resolve()),
+    ))
+    checks.append(make_deploy_check(
+        "plugin-files",
+        "Plugin files",
+        "ok",
+        "CompositionPipelineExporter plugin files were written.",
+        str(plugin_dir),
+    ))
+    checks.append(make_deploy_check(
+        "ue-restart",
+        "Unreal restart",
+        "warning",
+        "Restart Unreal Editor if the Composition Pipeline menu does not appear.",
+        "Tools > Composition Pipeline > Export Selected Scene Proxies",
+    ))
+
+    return {
+        "ok": True,
+        "summary": "UE export tools deployed",
+        "pluginDir": str(plugin_dir),
+        "menuPath": "Tools > Composition Pipeline > Export Selected Scene Proxies",
+        "checks": checks,
+    }
+
+
 def notify_reload():
     global reload_version
     with reload_condition:
@@ -330,6 +501,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_json(self, status, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_body(status, body, MIME_TYPES[".json"])
+
+    def read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
+
     def do_GET(self):
         path = urlparse(self.path).path
 
@@ -385,6 +566,33 @@ class Handler(BaseHTTPRequestHandler):
 
         content_type = MIME_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
         self.send_body(200, body, content_type)
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+
+        if path == "/api/deploy-ue-export-tools":
+            try:
+                payload = self.read_json_body()
+                result = deploy_ue_export_tools(payload.get("uprojectPath"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                result = {
+                    "ok": False,
+                    "summary": "Invalid deployment request",
+                    "checks": [
+                        make_deploy_check(
+                            "request-body",
+                            "Request body",
+                            "error",
+                            "Deployment request must be valid JSON.",
+                            str(error),
+                        )
+                    ],
+                }
+
+            self.send_json(200, result)
+            return
+
+        self.send_body(404, b"Not Found", "text/plain; charset=utf-8")
 
     def log_message(self, format, *args):
         return

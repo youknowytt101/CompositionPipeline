@@ -15,32 +15,26 @@ assert.match(
 
 assert.match(
   playMode,
-  /pitch\s*=\s*THREE\.MathUtils\.clamp\(\s*pitch\s*\+\s*dy\s*\*\s*config\.lookSensitivity,/s,
+  /targetPitch\s*=\s*THREE\.MathUtils\.clamp\(\s*targetPitch\s*\+\s*dy\s*\*\s*config\.lookSensitivity,/s,
   "Mouse Y movement should map to the non-inverted third-person pitch direction"
-);
-
-assert.doesNotMatch(
-  playMode,
-  /requestPointerLock/,
-  "Play mode should not request pointer lock when the cursor should remain visible"
-);
-
-assert.doesNotMatch(
-  playMode,
-  /exitPointerLock/,
-  "Play mode should not release pointer lock because it no longer requests it"
-);
-
-assert.doesNotMatch(
-  playMode,
-  /style\.cursor\s*=\s*["']none["']/,
-  "Play mode should not hide the mouse cursor"
 );
 
 assert.match(
   playMode,
-  /captureCameraKey:\s*["']keyc["']/,
-  "C should be the runtime shortcut for capturing the current player camera"
+  /requestPointerLock/,
+  "Play mode should request pointer lock for runtime camera look"
+);
+
+assert.match(
+  playMode,
+  /exitPointerLock/,
+  "Play mode should release pointer lock on exit"
+);
+
+assert.match(
+  playMode,
+  /captureCameraButton:\s*1/,
+  "Middle mouse should be the runtime shortcut for capturing the current player camera"
 );
 
 assert.match(
@@ -51,8 +45,14 @@ assert.match(
 
 assert.match(
   playMode,
+  /event\.button\s*===\s*config\.captureCameraButton[\s\S]*onCaptureCamera\(\)/,
+  "Middle mouse while playing should invoke the capture callback"
+);
+
+assert.doesNotMatch(
+  playMode,
   /code\s*===\s*config\.captureCameraKey[\s\S]*onCaptureCamera\(\)/,
-  "Pressing the capture shortcut while playing should invoke the capture callback"
+  "C should no longer capture the current player camera"
 );
 
 assert.match(

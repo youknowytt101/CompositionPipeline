@@ -124,6 +124,28 @@
         display: none;
       }
 
+      .scene-outliner-panel {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .scene-outliner-model-container,
+      .scene-outliner-list-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+      }
+
+      .scene-outliner-model-container {
+        flex: 0 0 auto;
+      }
+
+      .scene-outliner-list-container {
+        flex: 1 1 auto;
+        overflow: hidden;
+      }
+
       .model-transform-details[hidden],
       .model-transform-empty[hidden] {
         display: none;
@@ -166,6 +188,20 @@
         display: grid;
         grid-template-columns: 1fr;
         gap: 6px;
+      }
+
+      .model-transform-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .model-transform-section-title {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 10px;
+        font-weight: 650;
+        line-height: 1.2;
+        text-transform: uppercase;
       }
 
       .model-coordinate-row {
@@ -251,6 +287,37 @@
         font-variant-numeric: tabular-nums;
       }
 
+      .ue-project-path-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .ue-project-path-input {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        padding: 0 8px;
+        background: rgba(0, 0, 0, 0.18);
+        color: rgba(255, 255, 255, 0.9);
+        font: inherit;
+        font-size: 11px;
+      }
+
+      .ue-project-path-input::placeholder {
+        color: rgba(255, 255, 255, 0.34);
+      }
+
+      .ue-project-path-input:focus {
+        outline: 2px solid rgba(255, 255, 255, 0.38);
+        outline-offset: 1px;
+      }
+
       .local-setup-check-status {
         color: rgba(255, 255, 255, 0.62);
         font-size: 12px;
@@ -328,6 +395,7 @@
         flex-direction: column;
         gap: 6px;
         min-height: 0;
+        overflow: auto;
       }
 
       .scene-outliner-item {
@@ -400,6 +468,16 @@
       .camera-range {
         width: 100%;
         accent-color: #ffffff;
+      }
+
+      .settings-color {
+        width: 38px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
       }
 
       .aspect-preset-grid {
@@ -762,6 +840,35 @@
               <button class="aspect-preset-button" type="button" data-aspect-preset="9:16">9:16</button>
             </div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-label-row">
+              <span>Environment Color</span>
+              <input
+                id="env-color-input"
+                class="settings-color"
+                type="color"
+                value="#8a9bb0"
+                aria-label="environment color"
+              />
+            </div>
+          </div>
+
+          <label class="settings-field" for="env-intensity-range">
+            <span class="settings-label-row">
+              <span>Environment Intensity</span>
+              <output id="env-intensity-value" class="settings-value" for="env-intensity-range">0.50</output>
+            </span>
+            <input
+              id="env-intensity-range"
+              class="camera-range"
+              type="range"
+              min="0"
+              max="2"
+              step="0.05"
+              value="0.5"
+            />
+          </label>
         </section>
         <section
           id="model-edit-panel"
@@ -772,27 +879,7 @@
           hidden
         >
           <h2 class="settings-heading">Model</h2>
-          <div id="model-transform-empty" class="model-transform-empty">未选择模型</div>
-          <div id="model-transform-details" class="model-transform-details" hidden>
-            <div class="model-transform-summary">
-              <div id="model-transform-name" class="model-transform-name">-</div>
-              <div id="model-transform-type" class="model-transform-type">Unreal Units (cm)</div>
-            </div>
-            <div class="model-coordinate-grid" aria-label="model location">
-              <div class="model-coordinate-row">
-                <span class="model-coordinate-axis">X</span>
-                <output id="model-location-x" class="model-coordinate-value">0 cm</output>
-              </div>
-              <div class="model-coordinate-row">
-                <span class="model-coordinate-axis">Y</span>
-                <output id="model-location-y" class="model-coordinate-value">0 cm</output>
-              </div>
-              <div class="model-coordinate-row">
-                <span class="model-coordinate-axis">Z</span>
-                <output id="model-location-z" class="model-coordinate-value">0 cm</output>
-              </div>
-            </div>
-          </div>
+          <div class="model-transform-empty">AI 模型生成面板预留</div>
         </section>
         <section
           id="terrain-panel"
@@ -821,25 +908,104 @@
             <button id="local-setup-check-button" class="ue-rock-sync-button" type="button" data-local-setup-check>
               Check Local Setup
             </button>
+            <label class="ue-project-path-field">
+              <span>UE Project</span>
+              <input
+                id="ue-project-path-input"
+                class="ue-project-path-input"
+                type="text"
+                placeholder="D:\Path\Project.uproject"
+                autocomplete="off"
+              />
+            </label>
+            <button id="deploy-ue-export-tools-button" class="ue-rock-sync-button" type="button" data-deploy-ue-export-tools>
+              Deploy UE Export Tools
+            </button>
             <div id="ue-rock-sync-status" class="ue-rock-sync-status">Ready to sync UE scene proxies</div>
             <div id="ue-rock-sync-source" class="ue-rock-sync-source">/ue-sync/scene.manifest.json</div>
             <div id="ue-semantic-rules-source" class="ue-rock-sync-source">/ue-sync/semantic.rules.json</div>
             <div class="ue-rock-sync-meta">Synced actors: <span id="ue-rock-sync-count">0</span></div>
+            <div id="ue-export-deploy-status" class="ue-rock-sync-status">Exporter tools are not deployed yet</div>
+            <div id="ue-export-deploy-results" class="local-setup-check-results" hidden></div>
             <div id="local-setup-check-status" class="local-setup-check-status">Local setup not checked</div>
             <div id="local-setup-check-results" class="local-setup-check-results" hidden></div>
           </div>
         </section>
         <section
           id="scene-outliner-panel"
-          class="settings-panel"
+          class="settings-panel scene-outliner-panel"
           data-left-panel-panel="scene-outliner"
           role="tabpanel"
           aria-label="scene outliner"
           hidden
         >
-          <h2 class="settings-heading">Scene</h2>
-          <div id="scene-outliner-empty" class="scene-outliner-empty">No scene elements</div>
-          <div id="scene-outliner-list" class="scene-outliner-list" aria-label="scene elements" hidden></div>
+          <section class="scene-outliner-model-container" aria-label="selected model transform">
+            <h2 class="settings-heading">Scene</h2>
+            <h3 class="settings-heading">Model</h3>
+            <div id="model-transform-empty" class="model-transform-empty">未选择模型</div>
+            <div id="model-transform-details" class="model-transform-details" hidden>
+              <div class="model-transform-summary">
+                <div id="model-transform-name" class="model-transform-name">-</div>
+                <div id="model-transform-type" class="model-transform-type">Unreal Units (cm)</div>
+              </div>
+              <div class="model-transform-section">
+                <div class="model-transform-section-title">Location</div>
+                <div class="model-coordinate-grid" aria-label="model location">
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">X</span>
+                    <output id="model-location-x" class="model-coordinate-value">0 cm</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Y</span>
+                    <output id="model-location-y" class="model-coordinate-value">0 cm</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Z</span>
+                    <output id="model-location-z" class="model-coordinate-value">0 cm</output>
+                  </div>
+                </div>
+              </div>
+              <div class="model-transform-section">
+                <div class="model-transform-section-title">Rotation</div>
+                <div class="model-coordinate-grid" aria-label="model rotation">
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">X</span>
+                    <output id="model-rotation-x" class="model-coordinate-value">0 deg</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Y</span>
+                    <output id="model-rotation-y" class="model-coordinate-value">0 deg</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Z</span>
+                    <output id="model-rotation-z" class="model-coordinate-value">0 deg</output>
+                  </div>
+                </div>
+              </div>
+              <div class="model-transform-section">
+                <div class="model-transform-section-title">Scale</div>
+                <div class="model-coordinate-grid" aria-label="model scale">
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">X</span>
+                    <output id="model-scale-x" class="model-coordinate-value">1</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Y</span>
+                    <output id="model-scale-y" class="model-coordinate-value">1</output>
+                  </div>
+                  <div class="model-coordinate-row">
+                    <span class="model-coordinate-axis">Z</span>
+                    <output id="model-scale-z" class="model-coordinate-value">1</output>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="scene-outliner-list-container" aria-label="scene model list">
+            <h3 class="settings-heading">Scene Models</h3>
+            <div id="scene-outliner-empty" class="scene-outliner-empty">No scene elements</div>
+            <div id="scene-outliner-list" class="scene-outliner-list" aria-label="scene elements" hidden></div>
+          </section>
         </section>
       </div>
       <nav

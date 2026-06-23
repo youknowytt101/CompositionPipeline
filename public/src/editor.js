@@ -50,7 +50,10 @@ export function createEditor() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(initialViewport.width, initialViewport.height);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.BasicShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
   renderer.domElement.style.left = `${initialViewport.left}px`;
   renderer.domElement.style.top = `${initialViewport.top}px`;
   renderer.domElement.tabIndex = 0;
@@ -58,12 +61,57 @@ export function createEditor() {
 
   const selectionOutline = createSelectionOutline(renderer, camera);
 
-  const ambientLight = new THREE.HemisphereLight(0xffffff, 0xd8d8d8, 1.6);
+  const environmentSettings = {
+    color: new THREE.Color(0x8a9bb0),
+    intensity: 0.9
+  };
+
+  const ambientLight = new THREE.HemisphereLight(
+    environmentSettings.color.getHex(),
+    environmentSettings.color.getHex(),
+    environmentSettings.intensity
+  );
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.4);
+  function applyEnvironmentColor() {
+    // Sky color stays neutral so the lit (top) side is not tinted.
+    // Ground color carries the environment color -> lands on the dark side.
+    ambientLight.color.setRGB(1, 1, 1);
+    ambientLight.groundColor.copy(environmentSettings.color);
+    ambientLight.intensity = environmentSettings.intensity;
+  }
+
+  function setEnvironmentColor(hex) {
+    environmentSettings.color.set(hex);
+    applyEnvironmentColor();
+  }
+
+  function setEnvironmentIntensity(value) {
+    const intensity = clampNumber(Number(value) || 0, 0, 2);
+    environmentSettings.intensity = intensity;
+    applyEnvironmentColor();
+    return intensity;
+  }
+
+  applyEnvironmentColor();
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
   directionalLight.position.set(8, 14, 10);
+  directionalLight.castShadow = true;
+  // 4096 map over a tighter ±60 frustum keeps texels small (~0.029 world units),
+  // which is what stops the shadow edges from shimmering as the camera moves.
+  directionalLight.shadow.mapSize.set(4096, 4096);
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 400;
+  directionalLight.shadow.camera.left = -60;
+  directionalLight.shadow.camera.right = 60;
+  directionalLight.shadow.camera.top = 60;
+  directionalLight.shadow.camera.bottom = -60;
+  directionalLight.shadow.bias = -0.00015;
+  directionalLight.shadow.normalBias = 0.03;
+  directionalLight.shadow.radius = 0;
   scene.add(directionalLight);
+  scene.add(directionalLight.target);
 
   const gridSize = 500;
   const gridSnapSize = 1;
@@ -151,7 +199,7 @@ export function createEditor() {
     new THREE.PlaneGeometry(gridSize, gridSize, 1, 1),
     new THREE.ShadowMaterial({
       color: 0x000000,
-      opacity: 0.24,
+      opacity: 0.4,
       transparent: true
     })
   );
@@ -161,6 +209,19 @@ export function createEditor() {
   shadowReceiver.receiveShadow = true;
   shadowReceiver.userData.pickable = false;
   scene.add(shadowReceiver);
+
+  // Opaque depth-writing floor so objects sinking below z=0 get occluded
+  // ("buried" look). White to match the background; visually invisible but it
+  // fills the depth buffer, unlike the transparent shadow/grid materials.
+  const groundOccluder = new THREE.Mesh(
+    new THREE.PlaneGeometry(gridSize, gridSize, 1, 1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  groundOccluder.name = "ground-occluder";
+  groundOccluder.position.z = -0.012;
+  groundOccluder.renderOrder = -1;
+  groundOccluder.userData.pickable = false;
+  scene.add(groundOccluder);
 
   const gridGeometry = new THREE.PlaneGeometry(gridSize, gridSize, 1, 1);
   const grid = new THREE.Mesh(gridGeometry, gridMaterial);
@@ -207,6 +268,12 @@ export function createEditor() {
   const modelLocationX = document.querySelector("#model-location-x");
   const modelLocationY = document.querySelector("#model-location-y");
   const modelLocationZ = document.querySelector("#model-location-z");
+  const modelRotationX = document.querySelector("#model-rotation-x");
+  const modelRotationY = document.querySelector("#model-rotation-y");
+  const modelRotationZ = document.querySelector("#model-rotation-z");
+  const modelScaleX = document.querySelector("#model-scale-x");
+  const modelScaleY = document.querySelector("#model-scale-y");
+  const modelScaleZ = document.querySelector("#model-scale-z");
   const sceneOutlinerEmpty = document.querySelector("#scene-outliner-empty");
   const sceneOutlinerList = document.querySelector("#scene-outliner-list");
   const ueRockSyncButton = document.querySelector("#ue-rock-sync-button");
@@ -216,12 +283,19 @@ export function createEditor() {
   const localSetupCheckButton = document.querySelector("#local-setup-check-button");
   const localSetupCheckStatus = document.querySelector("#local-setup-check-status");
   const localSetupCheckResults = document.querySelector("#local-setup-check-results");
+  const ueProjectPathInput = document.querySelector("#ue-project-path-input");
+  const deployUeExportToolsButton = document.querySelector("#deploy-ue-export-tools-button");
+  const ueExportDeployStatus = document.querySelector("#ue-export-deploy-status");
+  const ueExportDeployResults = document.querySelector("#ue-export-deploy-results");
   const playViewportFrame = document.querySelector("#play-viewport-frame");
   const fovRange = document.querySelector("#camera-fov-range");
   const fovValue = document.querySelector("#camera-fov-value");
   const runtimeAspectValue = document.querySelector("#runtime-aspect-value");
   const cameraSpeedInput = document.querySelector("#camera-speed-input");
   const aspectPresetButtons = Array.from(document.querySelectorAll("[data-aspect-preset]"));
+  const envColorInput = document.querySelector("#env-color-input");
+  const envIntensityRange = document.querySelector("#env-intensity-range");
+  const envIntensityValue = document.querySelector("#env-intensity-value");
   const cameraPreviewList = document.querySelector("#camera-preview-list");
   const dragPreview = document.querySelector("#drag-preview");
   const raycaster = new THREE.Raycaster();
@@ -241,6 +315,7 @@ export function createEditor() {
   let playMode = null;
   let nextAssetId = 1;
   let selectedAsset = null;
+  let copiedAsset = null;
   let duplicateOnTransformDrag = false;
   let duplicatedTransformAsset = null;
   let isTransformDragging = false;
@@ -278,7 +353,7 @@ export function createEditor() {
   transformControls.addEventListener("mouseDown", () => {
     isTransformDragging = true;
     duplicatedTransformAsset = duplicateOnTransformDrag && selectedAsset
-      ? duplicateAssetForTransform(selectedAsset)
+      ? duplicatedTransformAsset || duplicateAssetForTransform(selectedAsset)
       : null;
     duplicateOnTransformDrag = false;
     transformStart = selectedAsset ? captureTransform(selectedAsset) : null;
@@ -513,6 +588,28 @@ export function createEditor() {
     return `${formatted} cm`;
   }
 
+  function formatModelDegrees(value) {
+    const degrees = THREE.MathUtils.radToDeg(value);
+    const rounded = Math.abs(degrees) < 0.005
+      ? 0
+      : Math.round(degrees * 100) / 100;
+    const formatted = Number.isInteger(rounded)
+      ? `${rounded}`
+      : `${rounded}`.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+
+    return `${formatted} deg`;
+  }
+
+  function formatModelScale(value) {
+    const rounded = Math.abs(value) < 0.0005
+      ? 0
+      : Math.round(value * 1000) / 1000;
+
+    return Number.isInteger(rounded)
+      ? `${rounded}`
+      : `${rounded}`.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  }
+
   function updateModelTransformPanel() {
     if (
       !modelTransformEmpty ||
@@ -521,7 +618,13 @@ export function createEditor() {
       !modelTransformType ||
       !modelLocationX ||
       !modelLocationY ||
-      !modelLocationZ
+      !modelLocationZ ||
+      !modelRotationX ||
+      !modelRotationY ||
+      !modelRotationZ ||
+      !modelScaleX ||
+      !modelScaleY ||
+      !modelScaleZ
     ) {
       return;
     }
@@ -540,6 +643,12 @@ export function createEditor() {
     modelLocationX.textContent = formatUnrealCentimeters(selectedAsset.position.x);
     modelLocationY.textContent = formatUnrealCentimeters(selectedAsset.position.y);
     modelLocationZ.textContent = formatUnrealCentimeters(selectedAsset.position.z);
+    modelRotationX.textContent = formatModelDegrees(selectedAsset.rotation.x);
+    modelRotationY.textContent = formatModelDegrees(selectedAsset.rotation.y);
+    modelRotationZ.textContent = formatModelDegrees(selectedAsset.rotation.z);
+    modelScaleX.textContent = formatModelScale(selectedAsset.scale.x);
+    modelScaleY.textContent = formatModelScale(selectedAsset.scale.y);
+    modelScaleZ.textContent = formatModelScale(selectedAsset.scale.z);
   }
 
   function setLeftPanelTab(tabName) {
@@ -701,6 +810,13 @@ export function createEditor() {
     }
   }
 
+  function setUeExportDeployBusy(busy) {
+    if (deployUeExportToolsButton) {
+      deployUeExportToolsButton.disabled = busy;
+      deployUeExportToolsButton.textContent = busy ? "Deploying..." : "Deploy UE Export Tools";
+    }
+  }
+
   function createLocalSetupCheckItem(check) {
     const status = ["ok", "warning", "error"].includes(check.status) ? check.status : "warning";
     const item = document.createElement("div");
@@ -754,6 +870,27 @@ export function createEditor() {
     }
   }
 
+  function renderUeExportDeployResult(payload) {
+    if (ueExportDeployStatus) {
+      ueExportDeployStatus.textContent = payload.summary || "UE export tools deployment finished";
+    }
+
+    if (!ueExportDeployResults) {
+      return;
+    }
+
+    const checks = Array.isArray(payload.checks) ? payload.checks : [];
+
+    ueExportDeployResults.hidden = checks.length === 0;
+    ueExportDeployResults.replaceChildren(...checks.map(createLocalSetupCheckItem));
+  }
+
+  function renderUeExportDeployFailure(error) {
+    if (ueExportDeployStatus) {
+      ueExportDeployStatus.textContent = `UE export tools deployment failed: ${error.message || error}`;
+    }
+  }
+
   async function runLocalSetupCheck() {
     setLocalSetupCheckBusy(true);
 
@@ -769,6 +906,32 @@ export function createEditor() {
       renderLocalSetupCheckFailure(error);
     } finally {
       setLocalSetupCheckBusy(false);
+    }
+  }
+
+  async function deployUeExportTools() {
+    setUeExportDeployBusy(true);
+
+    try {
+      const response = await fetch("/api/deploy-ue-export-tools", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          uprojectPath: ueProjectPathInput?.value || ""
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      renderUeExportDeployResult(await response.json());
+    } catch (error) {
+      renderUeExportDeployFailure(error);
+    } finally {
+      setUeExportDeployBusy(false);
     }
   }
 
@@ -1083,8 +1246,14 @@ export function createEditor() {
         return;
       }
 
+      if (child.userData.outline) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+        return;
+      }
+
       child.castShadow = true;
-      child.receiveShadow = true;
+      child.receiveShadow = false;
     });
   }
 
@@ -1264,7 +1433,15 @@ export function createEditor() {
     asset.updateMatrixWorld(true);
   }
 
+  function isImportedEditableAsset(asset) {
+    return String(asset?.userData?.assetType || "").startsWith("ue-");
+  }
+
   function duplicateAssetForTransform(sourceAsset) {
+    if (isImportedEditableAsset(sourceAsset)) {
+      return duplicateImportedAsset(sourceAsset);
+    }
+
     const type = sourceAsset.userData.assetType;
     const duplicate = markAsset(createAsset(type, { cubeSizeMeters, defaultAssetColor }), type);
 
@@ -1272,6 +1449,97 @@ export function createEditor() {
     scene.add(duplicate);
     selectAsset(duplicate);
     return duplicate;
+  }
+
+  function markImportedDuplicateAsset(asset, sourceAsset) {
+    const sourceId = sourceAsset.userData.assetId || sourceAsset.name || "ue-import";
+    const id = `${sourceId}-copy-${nextAssetId}`;
+    nextAssetId += 1;
+
+    asset.name = id;
+    asset.userData = {
+      ...(sourceAsset.userData || {}),
+      ...(asset.userData || {}),
+      assetRoot: asset,
+      assetId: id,
+      label: `${sourceAsset.userData.label || sourceAsset.name || sourceId} Copy`
+    };
+
+    asset.traverse((child) => {
+      child.userData = {
+        ...(child.userData || {}),
+        assetRoot: asset,
+        assetId: id,
+        assetType: sourceAsset.userData.assetType
+      };
+
+      if (child.isMesh) {
+        child.userData.pickable = true;
+      }
+    });
+
+    configureAssetShadows(asset);
+    return asset;
+  }
+
+  function duplicateImportedAsset(sourceAsset) {
+    const duplicate = markImportedDuplicateAsset(sourceAsset.clone(true), sourceAsset);
+
+    applyTransform(duplicate, captureTransform(sourceAsset));
+    ueRockSync.group.add(duplicate);
+    markSceneOutlinerDirty();
+    selectAsset(duplicate);
+    return duplicate;
+  }
+
+  function duplicateSelectedAsset() {
+    if (
+      !selectedAsset ||
+      isPlayModeActive() ||
+      isTransformDragging ||
+      cameraControls.isDragging() ||
+      !getEditableAssetCollection(selectedAsset)
+    ) {
+      return false;
+    }
+
+    const duplicate = duplicateAssetForTransform(selectedAsset);
+    duplicate.position.x += gridSnapSize;
+    duplicate.position.y += gridSnapSize;
+    duplicate.updateMatrixWorld(true);
+    pushUndo({ type: "duplicate", asset: duplicate });
+    markSceneOutlinerDirty();
+    render();
+    return true;
+  }
+
+  function copySelectedAsset() {
+    if (!selectedAsset || !getEditableAssetCollection(selectedAsset)) {
+      return false;
+    }
+
+    copiedAsset = selectedAsset;
+    return true;
+  }
+
+  function pasteCopiedAsset() {
+    if (
+      !copiedAsset ||
+      isPlayModeActive() ||
+      isTransformDragging ||
+      cameraControls.isDragging()
+    ) {
+      return false;
+    }
+
+    const duplicate = duplicateAssetForTransform(copiedAsset);
+    duplicate.position.x += gridSnapSize;
+    duplicate.position.y += gridSnapSize;
+    duplicate.updateMatrixWorld(true);
+    pushUndo({ type: "duplicate", asset: duplicate });
+    markSceneOutlinerDirty();
+    render();
+    return true;
   }
 
   function transformsMatch(first, second) {
@@ -1290,13 +1558,44 @@ export function createEditor() {
     }
   }
 
-  function removeAsset(asset) {
-    const index = placedAssets.indexOf(asset);
-
-    if (index !== -1) {
-      placedAssets.splice(index, 1);
+  function getEditableAssetCollection(asset) {
+    if (!asset) {
+      return null;
     }
 
+    if (placedAssets.includes(asset)) {
+      return placedAssets;
+    }
+
+    if (ueRockSync.group.children.includes(asset)) {
+      return ueRockSync.group.children;
+    }
+
+    return null;
+  }
+
+  function getRestorableAssetCollection(asset) {
+    return getEditableAssetCollection(asset)
+      || (isImportedEditableAsset(asset) ? ueRockSync.group.children : placedAssets);
+  }
+
+  function getEditableAssetParent(asset) {
+    const collection = getRestorableAssetCollection(asset);
+    return collection === ueRockSync.group.children ? ueRockSync.group : scene;
+  }
+
+  function removeAsset(asset) {
+    const collection = getEditableAssetCollection(asset);
+    const index = collection ? collection.indexOf(asset) : -1;
+    const parent = asset.parent;
+
+    if (parent?.children === collection) {
+      parent.remove(asset);
+    } else if (index !== -1) {
+      collection.splice(index, 1);
+    }
+
+    parent?.remove(asset);
     scene.remove(asset);
     markSceneOutlinerDirty();
 
@@ -1308,13 +1607,26 @@ export function createEditor() {
   }
 
   function restoreAsset(asset, index) {
-    if (!placedAssets.includes(asset)) {
-      const safeIndex = THREE.MathUtils.clamp(index, 0, placedAssets.length);
-      placedAssets.splice(safeIndex, 0, asset);
+    const collection = getRestorableAssetCollection(asset);
+    const parent = getEditableAssetParent(asset);
+
+    if (!collection.includes(asset)) {
+      const safeIndex = THREE.MathUtils.clamp(index, 0, collection.length);
+
+      if (parent.children === collection) {
+        parent.add(asset);
+        const appendedIndex = collection.indexOf(asset);
+
+        if (appendedIndex !== -1) {
+          collection.splice(appendedIndex, 1);
+        }
+      }
+
+      collection.splice(safeIndex, 0, asset);
     }
 
     if (!asset.parent) {
-      scene.add(asset);
+      parent.add(asset);
     }
 
     markSceneOutlinerDirty();
@@ -1349,7 +1661,8 @@ export function createEditor() {
     }
 
     const asset = selectedAsset;
-    const index = placedAssets.indexOf(asset);
+    const collection = getEditableAssetCollection(asset);
+    const index = collection ? collection.indexOf(asset) : -1;
 
     if (index === -1) {
       return false;
@@ -1387,7 +1700,7 @@ export function createEditor() {
     }
 
     if (action.type === "transform") {
-      if (!placedAssets.includes(action.asset)) {
+      if (!getEditableAssetCollection(action.asset)) {
         return true;
       }
 
@@ -1476,6 +1789,7 @@ export function createEditor() {
 
   function prepareTransformDuplicate(event) {
     duplicateOnTransformDrag = false;
+    duplicatedTransformAsset = null;
 
     if (
       isPlayModeActive() ||
@@ -1495,7 +1809,13 @@ export function createEditor() {
 
     transformControls.updateMatrixWorld(true);
     transformControls.pointerHover(getTransformPointerFromEvent(event));
-    duplicateOnTransformDrag = transformControls.axis !== null;
+
+    if (transformControls.axis === null) {
+      return;
+    }
+
+    duplicatedTransformAsset = duplicateAssetForTransform(selectedAsset);
+    duplicateOnTransformDrag = true;
   }
 
   function getAssetAtEvent(event) {
@@ -1867,6 +2187,21 @@ export function createEditor() {
       return;
     }
 
+    if ((event.ctrlKey || event.metaKey) && code === "keyd" && duplicateSelectedAsset()) {
+      event.preventDefault();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && code === "keyc" && copySelectedAsset()) {
+      event.preventDefault();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && code === "keyv" && pasteCopiedAsset()) {
+      event.preventDefault();
+      return;
+    }
+
     if (
       (code === "delete" || code === "backspace") &&
       selectedAsset &&
@@ -1959,6 +2294,26 @@ export function createEditor() {
   fovRange?.addEventListener("input", () => {
     setCameraFov(fovRange.value);
   });
+  if (envColorInput) {
+    envColorInput.value = `#${environmentSettings.color.getHexString()}`;
+    envColorInput.addEventListener("input", () => {
+      setEnvironmentColor(envColorInput.value);
+      render();
+    });
+  }
+  if (envIntensityRange) {
+    envIntensityRange.value = `${environmentSettings.intensity}`;
+    envIntensityRange.addEventListener("input", () => {
+      const intensity = setEnvironmentIntensity(envIntensityRange.value);
+      if (envIntensityValue) {
+        envIntensityValue.textContent = intensity.toFixed(2);
+      }
+      render();
+    });
+  }
+  if (envIntensityValue) {
+    envIntensityValue.textContent = environmentSettings.intensity.toFixed(2);
+  }
   aspectPresetButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const preset = button.dataset.aspectPreset;
@@ -2001,6 +2356,7 @@ export function createEditor() {
     setImportedSceneDisplayMode(ueRockSync.getDisplayMode() === "semanticColor" ? "gray" : "semanticColor");
   });
   localSetupCheckButton?.addEventListener("click", runLocalSetupCheck);
+  deployUeExportToolsButton?.addEventListener("click", deployUeExportTools);
   window.addEventListener("pointermove", updateRightPanelResize);
   window.addEventListener("pointerup", endRightPanelResize);
   window.addEventListener("pointercancel", endRightPanelResize);

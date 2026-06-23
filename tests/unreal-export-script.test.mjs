@@ -20,7 +20,13 @@ assert.match(gitignore, /^public\/ue-sync\/$/m);
 
 const script = read("tools/unreal/sync_selected_static_mesh_rocks.py");
 
-assert.match(script, /OUTPUT_ROOT\s*=\s*Path\(r["']D:\/CompositionPipeline\/public\/ue-sync["']\)/);
+assert.match(script, /import\s+os/);
+assert.match(script, /CONFIG_PATH\s*=\s*Path\(__file__\)\.resolve\(\)\.with_name\(["']composition_pipeline_config\.json["']\)/);
+assert.match(script, /def load_output_root\(\)/);
+assert.match(script, /COMPOSITION_PIPELINE_UE_SYNC_DIR/);
+assert.match(script, /outputRoot/);
+assert.match(script, /OUTPUT_ROOT\s*=\s*load_output_root\(\)/);
+assert.doesNotMatch(script, /D:\/CompositionPipeline\/public\/ue-sync/);
 assert.match(script, /MESH_OUTPUT_DIR\s*=\s*OUTPUT_ROOT\s*\/\s*["']meshes["']/);
 assert.match(script, /LEGACY_MANIFEST_PATH\s*=\s*OUTPUT_ROOT\s*\/\s*["']rocks\.instances\.json["']/);
 assert.doesNotMatch(
@@ -102,6 +108,12 @@ assert.match(script, /with\s+LEGACY_MANIFEST_PATH\.open/);
 assert.match(script, /json\.dump\(manifest,/);
 assert.match(script, /json\.dump\(scene_manifest,/);
 assert.match(script, /json\.dump\(semantic_rules,/);
+assert.match(script, /def cleanup_unused_mesh_exports\(used_mesh_files: set\[str\]\) -> int:/);
+assert.match(script, /for mesh_path in MESH_OUTPUT_DIR\.glob\(["']\*\.glb["']\)/);
+assert.match(script, /if mesh_path\.name in used_mesh_files:/);
+assert.match(script, /mesh_path\.unlink\(\)/);
+assert.match(script, /removed_meshes = cleanup_unused_mesh_exports\(set\(exported_meshes\.values\(\)\)\)/);
+assert.match(script, /Removed \{removed_meshes\} unused exported GLB files/);
 assert.match(script, /skipped_components\s*=\s*0/);
 assert.match(script, /except Exception as error:/);
 assert.match(script, /Skipping component/);

@@ -8,6 +8,7 @@ const defaultSemanticClasses = {
   unclassified: { id: 0, color: "#ff00ff" }
 };
 export const defaultImportedModelFaceReductionRatio = 0.85;
+const importedToonGradientMaps = new WeakMap();
 
 export function ueCentimetersToSceneUnits(value) {
   return Number(value || 0) / centimetersPerSceneUnit;
@@ -139,6 +140,9 @@ function normalizeSceneComponent(input, index, actor) {
   const transform = normalizeTransformRecord(input.transform || (terrain ? { location: terrain.center } : input));
   const colorId = normalizeOptionalNumber(input.colorId);
 
+  // Minimal manifest only needs id / mesh / transform / semantic. The remaining
+  // classification fields are OPTIONAL: kept (with empty defaults) so the
+  // browser-side semantic rule engine still works if a manifest provides them.
   return {
     id: input.id || `${actor.id}-component-${index + 1}`,
     label: input.label || input.name || `Component ${index + 1}`,
@@ -361,12 +365,45 @@ function disposeObjectMaterials(object) {
   });
 }
 
-function applyGrayModelMaterial(object, THREE) {
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x9b9b9b,
-    roughness: 0.92,
-    metalness: 0.02
+function getImportedToonGradientMap(THREE) {
+  if (importedToonGradientMaps.has(THREE)) {
+    return importedToonGradientMaps.get(THREE);
+  }
+
+  if (!THREE.DataTexture) {
+    const fallbackMap = { kind: "toon-gradient" };
+    importedToonGradientMaps.set(THREE, fallbackMap);
+    return fallbackMap;
+  }
+
+  const stops = new Uint8Array([70, 160, 240]);
+  const map = new THREE.DataTexture(stops, stops.length, 1, THREE.RedFormat);
+  map.minFilter = THREE.NearestFilter;
+  map.magFilter = THREE.NearestFilter;
+  map.generateMipmaps = false;
+  map.needsUpdate = true;
+  map.kind = "toon-gradient";
+  importedToonGradientMaps.set(THREE, map);
+  return map;
+}
+
+function createImportedToonMaterial(THREE, color) {
+  if (!THREE.MeshToonMaterial) {
+    return new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.92,
+      metalness: 0.02
+    });
+  }
+
+  return new THREE.MeshToonMaterial({
+    color,
+    gradientMap: getImportedToonGradientMap(THREE)
   });
+}
+
+function applyGrayModelMaterial(object, THREE) {
+  const material = createImportedToonMaterial(THREE, 0x9b9b9b);
 
   object.traverse((child) => {
     if (!child.isMesh) {
@@ -376,7 +413,7 @@ function applyGrayModelMaterial(object, THREE) {
     disposeObjectMaterials(child);
     child.material = material;
     child.castShadow = true;
-    child.receiveShadow = true;
+    child.receiveShadow = false;
     child.userData.pickable = true;
   });
 }
@@ -559,11 +596,7 @@ export function createUnrealRockSyncController({
   let displayMode = "gray";
   let semanticRules = normalizeSemanticRules();
   let activeManifestSource = manifestUrl;
-  const grayMaterial = new THREE.MeshStandardMaterial({
-    color: 0x9b9b9b,
-    roughness: 0.92,
-    metalness: 0.02
-  });
+  const grayMaterial = createImportedToonMaterial(THREE, 0x9b9b9b);
 
   grayMaterial.userData = {
     ...(grayMaterial.userData || {}),
@@ -633,11 +666,7 @@ export function createUnrealRockSyncController({
     metadata.colorId = colorId;
 
     if (!semanticMaterials.has(cacheKey)) {
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.92,
-        metalness: 0.02
-      });
+      const material = createImportedToonMaterial(THREE, color);
 
       material.userData = {
         ...(material.userData || {}),
@@ -717,14 +746,11 @@ export function createUnrealRockSyncController({
         object.name = instance.id;
         object.userData.assetId = instance.id;
         object.userData.assetType = assetType;
+        // Minimal manifest only carries label (display), semantic and colorId.
         copyImportedMetadata(object, {
           label: instance.label,
-          class: instance.class,
-          folderPath: instance.folderPath,
-          tags: instance.tags,
           semantic: instance.semantic,
-          colorId: instance.colorId,
-          sourceMetadata: instance.sourceMetadata
+          colorId: instance.colorId
         });
         if (hasChildMeshes) {
           applySceneTransform(object, instance, THREE, {
@@ -757,14 +783,8 @@ export function createUnrealRockSyncController({
             componentObject.name = meshInstance.id || `${instance.id}-component`;
             copyImportedMetadata(componentObject, {
               label: meshInstance.label,
-              name: meshInstance.name,
-              type: meshInstance.type,
-              meshAssetPath: meshInstance.meshAssetPath,
-              materialSlots: meshInstance.materialSlots,
-              tags: meshInstance.tags,
               semantic: semanticMetadata.semantic,
-              colorId: semanticMetadata.colorId,
-              sourceMetadata: meshInstance.sourceMetadata
+              colorId: semanticMetadata.colorId
             });
             applySceneTransform(componentObject, meshInstance, THREE, {
               scaleMode: "mesh",

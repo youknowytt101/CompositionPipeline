@@ -1,42 +1,108 @@
 import * as THREE from "three";
 
-export function createCube({ cubeSizeMeters, defaultAssetColor }) {
-  const group = new THREE.Group();
-  const geometry = new THREE.BoxGeometry(cubeSizeMeters, cubeSizeMeters, cubeSizeMeters);
-  const mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.58 })
-  );
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geometry),
-    new THREE.LineBasicMaterial({ color: 0x1f1f1f, transparent: true, opacity: 0.38 })
-  );
+// 3-step toon gradient ramp (dark / mid / light), shared by toon assets.
+let sharedToonGradientMap = null;
+function getToonGradientMap() {
+  if (sharedToonGradientMap) {
+    return sharedToonGradientMap;
+  }
 
-  mesh.position.z = cubeSizeMeters / 2;
-  edges.position.copy(mesh.position);
-  edges.userData.pickable = false;
-  group.add(mesh, edges);
-  return group;
+  // Three luminance stops -> three flat shading bands (dark / mid / light).
+  const stops = new Uint8Array([70, 160, 240]);
+  const map = new THREE.DataTexture(stops, stops.length, 1, THREE.RedFormat);
+  map.minFilter = THREE.NearestFilter;
+  map.magFilter = THREE.NearestFilter;
+  map.generateMipmaps = false;
+  map.needsUpdate = true;
+  sharedToonGradientMap = map;
+  return map;
 }
 
-export function createSphere({ defaultAssetColor }) {
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.55, 32, 18),
-    new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.62 })
-  );
+// Default gray-model toon material: flat 3-step ramp only.
+// No rim/specular -> the surface reads as pure flat cel shading.
+function createToonGrayMaterial(color = 0x9a9a9a) {
+  return new THREE.MeshToonMaterial({
+    color,
+    gradientMap: getToonGradientMap()
+  });
+}
 
+// Inverted-hull outline: back-face shell whose vertices are pushed out ALONG
+// their normals by a constant world-space thickness. Uniform line width on any
+// shape/size, and seams stay closed (unlike a uniform scale).
+function createOutlineMaterial(thickness = 0.012) {
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: {
+      outlineColor: { value: new THREE.Color(0x141414) },
+      outlineThickness: { value: thickness }
+    },
+    vertexShader: `
+      uniform float outlineThickness;
+      void main() {
+        vec3 pushed = position + normalize(normal) * outlineThickness;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pushed, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 outlineColor;
+      void main() {
+        gl_FragColor = vec4(outlineColor, 1.0);
+      }
+    `
+  });
+  return material;
+}
+
+function createOutlineMesh(geometry, thickness = 0.012) {
+  const outline = new THREE.Mesh(geometry, createOutlineMaterial(thickness));
+  outline.userData.pickable = false;
+  outline.userData.outline = true;
+  return outline;
+}
+
+export function createCube({ cubeSizeMeters }) {
+  const geometry = new THREE.BoxGeometry(cubeSizeMeters, cubeSizeMeters, cubeSizeMeters);
+  const mesh = new THREE.Mesh(geometry, createToonGrayMaterial());
+
+  // ~12mm world-space outline on a 1m cube.
+  const outline = createOutlineMesh(geometry, 0.012);
+
+  mesh.add(outline);
+  mesh.position.z = cubeSizeMeters / 2;
+  return mesh;
+}
+
+export function createSphere() {
+  const geometry = new THREE.SphereGeometry(0.55, 48, 32);
+  const mesh = new THREE.Mesh(geometry, createToonGrayMaterial());
+
+  // Fine contour line on a 0.55r sphere.
+  const outline = createOutlineMesh(geometry, 0.012);
+
+  mesh.add(outline);
   mesh.position.z = 0.55;
   return mesh;
 }
 
-export function createCharacter({ defaultAssetColor }) {
+export function createCharacter() {
   const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.7 });
-  const headMaterial = new THREE.MeshStandardMaterial({ color: defaultAssetColor, roughness: 0.65 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.85, 6, 14), material);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 24, 16), headMaterial);
-  const leftFoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.12), material);
-  const rightFoot = leftFoot.clone();
+
+  // One toon material instance shared across the body parts.
+  const toon = createToonGrayMaterial();
+  const bodyGeometry = new THREE.CapsuleGeometry(0.28, 0.85, 6, 14);
+  const headGeometry = new THREE.SphereGeometry(0.26, 24, 16);
+  const footGeometry = new THREE.BoxGeometry(0.24, 0.42, 0.12);
+
+  const body = new THREE.Mesh(bodyGeometry, toon);
+  const head = new THREE.Mesh(headGeometry, toon);
+  const leftFoot = new THREE.Mesh(footGeometry, toon);
+  const rightFoot = new THREE.Mesh(footGeometry, toon);
+
+  body.add(createOutlineMesh(bodyGeometry, 0.012));
+  head.add(createOutlineMesh(headGeometry, 0.012));
+  leftFoot.add(createOutlineMesh(footGeometry, 0.01));
+  rightFoot.add(createOutlineMesh(footGeometry, 0.01));
 
   body.rotation.x = Math.PI / 2;
   body.position.z = 0.82;
@@ -60,7 +126,7 @@ export function createSunLight() {
   });
   const marker = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 12), markerMaterial);
   const rays = new THREE.Group();
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.6);
   const lightTarget = new THREE.Object3D();
 
   marker.position.z = 1.8;

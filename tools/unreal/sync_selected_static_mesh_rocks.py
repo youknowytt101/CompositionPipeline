@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import traceback
 from pathlib import Path
@@ -9,7 +10,27 @@ from pathlib import Path
 import unreal
 
 
-OUTPUT_ROOT = Path(r"D:/CompositionPipeline/public/ue-sync")
+CONFIG_PATH = Path(__file__).resolve().with_name("composition_pipeline_config.json")
+
+
+def load_output_root():
+    env_output_root = os.environ.get("COMPOSITION_PIPELINE_UE_SYNC_DIR")
+    if env_output_root:
+        return Path(env_output_root)
+
+    if CONFIG_PATH.exists():
+        try:
+            configured_output_root = json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("outputRoot")
+        except (OSError, json.JSONDecodeError):
+            configured_output_root = None
+
+        if configured_output_root:
+            return Path(configured_output_root)
+
+    return Path(__file__).resolve().parents[2] / "public" / "ue-sync"
+
+
+OUTPUT_ROOT = load_output_root()
 MESH_OUTPUT_DIR = OUTPUT_ROOT / "meshes"
 LEGACY_MANIFEST_PATH = OUTPUT_ROOT / "rocks.instances.json"
 SCENE_MANIFEST_PATH = OUTPUT_ROOT / "scene.manifest.json"
@@ -201,6 +222,27 @@ def export_static_mesh(static_mesh, output_path: Path) -> bool:
         task.options = options
 
     return bool(unreal.Exporter.run_asset_export_task(task))
+
+
+def cleanup_unused_mesh_exports(used_mesh_files: set[str]) -> int:
+    removed_count = 0
+
+    if not MESH_OUTPUT_DIR.exists():
+        return removed_count
+
+    for mesh_path in MESH_OUTPUT_DIR.glob("*.glb"):
+        if mesh_path.name in used_mesh_files:
+            continue
+
+        try:
+            mesh_path.unlink()
+            removed_count += 1
+            debug_file(f"Removed unused exported GLB {mesh_path.name}")
+        except OSError as error:
+            warn(f"Could not remove unused exported GLB {mesh_path}: {error}")
+            debug_file(f"FAILED removing unused exported GLB {mesh_path}: {error}")
+
+    return removed_count
 
 
 def vector_to_list(vector) -> list[float]:
@@ -520,23 +562,14 @@ def scene_component_record(actor, component, mesh_file: str, index: int) -> dict
         material_slots=material_slots,
     )
 
+    # Minimal export: geometry reference + world transform + final semantic only.
+    # Classification metadata (asset path, class, tags, material slots) is used to
+    # COMPUTE the semantic above, then intentionally dropped from the manifest.
     return {
         "id": f"{actor.get_name()}_{component.get_name()}_{index + 1}",
-        "label": f"{actor_label(actor)} / {component.get_name()}",
-        "name": component.get_name(),
-        "type": "StaticMeshComponent",
         "mesh": mesh_file,
-        "meshAssetPath": asset_path,
-        "materialSlots": material_slots,
-        "tags": component_tags(component),
         "semantic": semantic,
-        "colorId": semantic_class_id(semantic),
         "transform": transform_record_from_transform(transform),
-        "sourceMetadata": {
-            "actorClass": actor_class_name(actor),
-            "actorLabel": actor_label(actor),
-            "folderPath": actor_folder_path(actor),
-        },
     }
 
 
@@ -568,17 +601,12 @@ def scene_actor_record(actor, components: list[dict], source: str = "unreal-sele
         "unclassified",
     )
 
+    # Minimal export: id + world transform + final semantic + child components.
     return {
         "id": actor.get_name(),
-        "label": actor_label(actor),
-        "class": actor_class_name(actor),
-        "folderPath": actor_folder_path(actor),
-        "tags": actor_tags(actor),
         "semantic": semantic,
-        "colorId": semantic_class_id(semantic),
         "transform": transform_record_from_transform(transform),
         "components": components,
-        "source": source,
     }
 
 
@@ -699,10 +727,14 @@ def sync_selected_static_mesh_rocks() -> dict:
         json.dump(semantic_rules, file, ensure_ascii=False, indent=2)
         file.write("\n")
 
+    removed_meshes = cleanup_unused_mesh_exports(set(exported_meshes.values()))
+
     log(f"Wrote {len(instances)} selected actor static mesh groups to {LEGACY_MANIFEST_PATH}")
     log(f"Wrote {len(scene_actors)} scene actors to {SCENE_MANIFEST_PATH}")
     log(f"Wrote semantic rules to {SEMANTIC_RULES_PATH}")
     log(f"Exported {len(exported_meshes)} unique meshes to {MESH_OUTPUT_DIR}")
+    if removed_meshes:
+        log(f"Removed {removed_meshes} unused exported GLB files")
     if skipped_components:
         warn(f"Skipped {skipped_components} selected static mesh components")
     debug_file(f"Wrote actors: {len(scene_actors)}")

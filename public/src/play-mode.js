@@ -4,12 +4,15 @@ const defaultOptions = {
   cameraDistance: 6,
   cameraHeight: 1.8,
   cameraTargetHeight: 1.2,
-  lookSensitivity: 0.003,
-  maxPitch: 0.55,
-  minPitch: -0.35,
+  lookSensitivity: 0.0025,
+  // Near-full vertical freedom (~ +84 / -80 degrees), like a third-person game.
+  maxPitch: 1.47,
+  minPitch: -1.4,
   moveSpeed: 4.5,
   shoulderOffset: 0.45,
-  captureCameraKey: "keyc"
+  // Higher = snappier, lower = smoother. ~18 feels responsive yet damped.
+  lookDamping: 18,
+  captureCameraButton: 1
 };
 
 const movementKeys = new Set(["keyw", "keya", "keys", "keyd"]);
@@ -34,6 +37,10 @@ export function createPlayModeController({
   let playing = false;
   let yaw = 0;
   let pitch = 0.18;
+  // Target angles accumulated from mouse input; the actual yaw/pitch eases toward
+  // these every frame, which decouples smoothness from mouse-event frequency.
+  let targetYaw = 0;
+  let targetPitch = 0.18;
 
   function syncYawFromCamera() {
     camera.getWorldDirection(forward);
@@ -44,6 +51,7 @@ export function createPlayModeController({
     }
 
     yaw = Math.atan2(forward.y, forward.x);
+    targetYaw = yaw;
   }
 
   function getGroundForward() {
@@ -77,6 +85,38 @@ export function createPlayModeController({
     camera.lookAt(focusPoint);
   }
 
+  const canvas = renderer.domElement;
+
+  function isPointerLocked() {
+    return document.pointerLockElement === canvas;
+  }
+
+  function requestPointerLock() {
+    if (!isPointerLocked() && canvas.requestPointerLock) {
+      // Async; browsers may reject if not from a user gesture, that's fine.
+      const result = canvas.requestPointerLock();
+      if (result && typeof result.catch === "function") {
+        result.catch(() => {});
+      }
+    }
+  }
+
+  function exitPointerLock() {
+    if (isPointerLocked() && document.exitPointerLock) {
+      document.exitPointerLock();
+    }
+  }
+
+  // When the lock is lost (mouse left, Esc, tab switch), drop all input so the
+  // camera never gets a giant movementX/Y jump and never stays "stuck".
+  function handlePointerLockChange() {
+    if (playing && !isPointerLocked()) {
+      keys.clear();
+    }
+  }
+
+  document.addEventListener("pointerlockchange", handlePointerLockChange);
+
   function enter(character) {
     if (!character || character.userData.assetType !== "character") {
       return false;
@@ -87,7 +127,10 @@ export function createPlayModeController({
     keys.clear();
     syncYawFromCamera();
     pitch = 0.18;
+    targetYaw = yaw;
+    targetPitch = pitch;
     renderer.domElement.focus();
+    requestPointerLock();
     updateCamera();
     render();
     onChange(true);
@@ -102,6 +145,7 @@ export function createPlayModeController({
     playing = false;
     player = null;
     keys.clear();
+    exitPointerLock();
     render();
     onChange(false);
     return true;
@@ -117,11 +161,6 @@ export function createPlayModeController({
 
     if (code === "escape") {
       exit();
-      return true;
-    }
-
-    if (code === config.captureCameraKey) {
-      onCaptureCamera();
       return true;
     }
 
@@ -154,6 +193,14 @@ export function createPlayModeController({
 
     event.preventDefault();
     renderer.domElement.focus();
+
+    if (event.button === config.captureCameraButton) {
+      onCaptureCamera();
+      return true;
+    }
+
+    // Re-acquire the lock if it was lost (e.g. user pressed Esc then clicked back in).
+    requestPointerLock();
     return true;
   }
 
@@ -162,22 +209,35 @@ export function createPlayModeController({
       return false;
     }
 
-    const dx = event.movementX || 0;
-    const dy = event.movementY || 0;
+    // Only steer while pointer-locked. Without the lock, movementX/Y is unreliable
+    // (huge jumps when the cursor re-enters the page), which is what made the
+    // camera feel stuck.
+    if (!isPointerLocked()) {
+      return true;
+    }
+
     event.preventDefault();
+
+    // Guard against spurious large deltas (first event after lock, alt-tab, etc.).
+    const maxDelta = 200;
+    let dx = event.movementX || 0;
+    let dy = event.movementY || 0;
+    if (Math.abs(dx) > maxDelta || Math.abs(dy) > maxDelta) {
+      return true;
+    }
 
     if (dx === 0 && dy === 0) {
       return true;
     }
 
-    yaw -= dx * config.lookSensitivity;
-    pitch = THREE.MathUtils.clamp(
-      pitch + dy * config.lookSensitivity,
+    // Accumulate into the TARGET angles only. The per-frame update() eases the
+    // real camera toward these, giving smooth, frame-rate-independent rotation.
+    targetYaw -= dx * config.lookSensitivity;
+    targetPitch = THREE.MathUtils.clamp(
+      targetPitch + dy * config.lookSensitivity,
       config.minPitch,
       config.maxPitch
     );
-    updateCamera();
-    render();
     return true;
   }
 
@@ -185,6 +245,11 @@ export function createPlayModeController({
     if (!playing || !player) {
       return false;
     }
+
+    // Exponential smoothing toward target angles (frame-rate independent).
+    const t = 1 - Math.exp(-config.lookDamping * deltaTime);
+    yaw += (targetYaw - yaw) * t;
+    pitch += (targetPitch - pitch) * t;
 
     moveDirection.set(0, 0, 0);
 
@@ -204,13 +269,14 @@ export function createPlayModeController({
       moveDirection.addScaledVector(getGroundRight(), -1);
     }
 
-    if (moveDirection.lengthSq() === 0) {
-      return false;
+    if (moveDirection.lengthSq() > 0) {
+      moveDirection.normalize();
+      player.position.addScaledVector(moveDirection, config.moveSpeed * deltaTime);
+      player.rotation.z = Math.atan2(moveDirection.y, moveDirection.x) - Math.PI / 2;
     }
 
-    moveDirection.normalize();
-    player.position.addScaledVector(moveDirection, config.moveSpeed * deltaTime);
-    player.rotation.z = Math.atan2(moveDirection.y, moveDirection.x) - Math.PI / 2;
+    // Always refresh the camera while playing so rotation keeps easing smoothly
+    // every frame, independent of how often pointermove fires.
     updateCamera();
     return true;
   }

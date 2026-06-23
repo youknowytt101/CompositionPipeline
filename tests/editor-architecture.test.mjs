@@ -153,7 +153,14 @@ assert.match(index, /id="model-transform-type"/);
 assert.match(index, /id="model-location-x"/);
 assert.match(index, /id="model-location-y"/);
 assert.match(index, /id="model-location-z"/);
+assert.match(index, /id="model-rotation-x"/);
+assert.match(index, /id="model-rotation-y"/);
+assert.match(index, /id="model-rotation-z"/);
+assert.match(index, /id="model-scale-x"/);
+assert.match(index, /id="model-scale-y"/);
+assert.match(index, /id="model-scale-z"/);
 assert.match(index, /cm/);
+assert.match(index, /deg/);
 assert.match(index, /id="terrain-panel"/);
 assert.match(index, /data-left-panel-panel="terrain"/);
 assert.match(index, /aria-label="terrain"/);
@@ -182,6 +189,16 @@ assert.match(index, /aria-label="scene outliner"/);
 assert.match(index, /id="scene-outliner-empty"/);
 assert.match(index, /id="scene-outliner-list"/);
 assert.match(index, /class="scene-outliner-list"/);
+assert.match(
+  index,
+  /id="scene-outliner-panel"[\s\S]*class="scene-outliner-model-container"[\s\S]*id="model-transform-empty"[\s\S]*id="model-transform-details"[\s\S]*class="scene-outliner-list-container"[\s\S]*id="scene-outliner-empty"[\s\S]*id="scene-outliner-list"/,
+  "The scene outliner should show selected model information above the scene model list"
+);
+assert.doesNotMatch(
+  index,
+  /id="model-edit-panel"[\s\S]*id="model-transform-empty"[\s\S]*id="scene-outliner-panel"/,
+  "The model edit panel is reserved for future AI model generation and should not contain model transform details"
+);
 assert.match(index, /hidden/);
 assert.match(index, /id="camera-fov-range"/);
 assert.match(index, /id="camera-fov-value"/);
@@ -223,8 +240,12 @@ assert.match(leftTabActiveRule, /background:\s*var\(--editor-panel-bg\)/);
 assert.doesNotMatch(leftTabActiveRule, /border-color:/);
 assert.match(index, /\.settings-panel\s*\{[\s\S]*padding:\s*14px/);
 assert.match(index, /\.settings-panel\[hidden\]\s*\{[\s\S]*display:\s*none/);
+assert.match(index, /\.scene-outliner-panel\s*\{[\s\S]*height:\s*100%[\s\S]*overflow:\s*hidden/);
+assert.match(index, /\.scene-outliner-model-container,\s*[\s\S]*\.scene-outliner-list-container\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/);
+assert.match(index, /\.scene-outliner-list-container\s*\{[\s\S]*flex:\s*1 1 auto[\s\S]*overflow:\s*hidden/);
 assert.match(index, /\.model-transform-details\[hidden\],\s*[\s\S]*\.model-transform-empty\[hidden\]\s*\{[\s\S]*display:\s*none/);
 assert.match(index, /\.model-coordinate-grid\s*\{[\s\S]*display:\s*grid/);
+assert.match(index, /\.model-transform-section\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/);
 assert.match(index, /\.ue-rock-sync-card\s*\{[\s\S]*border:\s*1px solid/);
 assert.match(index, /\.ue-rock-sync-button\s*\{[\s\S]*width:\s*100%/);
 assert.match(index, /\.ue-rock-sync-meta\s*\{[\s\S]*font-variant-numeric:\s*tabular-nums/);
@@ -234,6 +255,7 @@ assert.match(index, /\.local-setup-check-item\.is-ok\s*\{[\s\S]*border-left-colo
 assert.match(index, /\.local-setup-check-item\.is-warning\s*\{[\s\S]*border-left-color:\s*#d18b4b/);
 assert.match(index, /\.local-setup-check-item\.is-error\s*\{[\s\S]*border-left-color:\s*#ff4d4d/);
 assert.match(index, /\.scene-outliner-list\s*\{[\s\S]*display:\s*flex/);
+assert.match(index, /\.scene-outliner-list\s*\{[\s\S]*overflow:\s*auto/);
 assert.match(index, /\.scene-outliner-item\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
 assert.match(index, /\.scene-outliner-item\.is-selected\s*\{[\s\S]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.16\)/);
 assert.match(index, /\.scene-outliner-empty\[hidden\],\s*[\s\S]*\.scene-outliner-list\[hidden\]\s*\{[\s\S]*display:\s*none/);
@@ -361,6 +383,12 @@ assert.match(editor, /const\s+modelTransformDetails\s*=\s*document\.querySelecto
 assert.match(editor, /const\s+modelLocationX\s*=\s*document\.querySelector\(\s*["']#model-location-x["']\s*\)/);
 assert.match(editor, /const\s+modelLocationY\s*=\s*document\.querySelector\(\s*["']#model-location-y["']\s*\)/);
 assert.match(editor, /const\s+modelLocationZ\s*=\s*document\.querySelector\(\s*["']#model-location-z["']\s*\)/);
+assert.match(editor, /const\s+modelRotationX\s*=\s*document\.querySelector\(\s*["']#model-rotation-x["']\s*\)/);
+assert.match(editor, /const\s+modelRotationY\s*=\s*document\.querySelector\(\s*["']#model-rotation-y["']\s*\)/);
+assert.match(editor, /const\s+modelRotationZ\s*=\s*document\.querySelector\(\s*["']#model-rotation-z["']\s*\)/);
+assert.match(editor, /const\s+modelScaleX\s*=\s*document\.querySelector\(\s*["']#model-scale-x["']\s*\)/);
+assert.match(editor, /const\s+modelScaleY\s*=\s*document\.querySelector\(\s*["']#model-scale-y["']\s*\)/);
+assert.match(editor, /const\s+modelScaleZ\s*=\s*document\.querySelector\(\s*["']#model-scale-z["']\s*\)/);
 assert.match(editor, /const\s+sceneOutlinerEmpty\s*=\s*document\.querySelector\(\s*["']#scene-outliner-empty["']\s*\)/);
 assert.match(editor, /const\s+sceneOutlinerList\s*=\s*document\.querySelector\(\s*["']#scene-outliner-list["']\s*\)/);
 assert.match(editor, /const\s+ueRockSyncButton\s*=\s*document\.querySelector\(\s*["']#ue-rock-sync-button["']\s*\)/);
@@ -370,6 +398,15 @@ assert.match(editor, /const\s+ueSemanticModeButton\s*=\s*document\.querySelector
 assert.match(editor, /const\s+localSetupCheckButton\s*=\s*document\.querySelector\(\s*["']#local-setup-check-button["']\s*\)/);
 assert.match(editor, /const\s+localSetupCheckStatus\s*=\s*document\.querySelector\(\s*["']#local-setup-check-status["']\s*\)/);
 assert.match(editor, /const\s+localSetupCheckResults\s*=\s*document\.querySelector\(\s*["']#local-setup-check-results["']\s*\)/);
+assert.match(editor, /const\s+ueProjectPathInput\s*=\s*document\.querySelector\(\s*["']#ue-project-path-input["']\s*\)/);
+assert.match(editor, /const\s+deployUeExportToolsButton\s*=\s*document\.querySelector\(\s*["']#deploy-ue-export-tools-button["']\s*\)/);
+assert.match(editor, /const\s+ueExportDeployStatus\s*=\s*document\.querySelector\(\s*["']#ue-export-deploy-status["']\s*\)/);
+assert.match(editor, /const\s+ueExportDeployResults\s*=\s*document\.querySelector\(\s*["']#ue-export-deploy-results["']\s*\)/);
+assert.match(index, /id="ue-project-path-input"/);
+assert.match(index, /id="deploy-ue-export-tools-button"/);
+assert.match(index, />\s*Deploy UE Export Tools\s*</);
+assert.match(index, /id="ue-export-deploy-status"/);
+assert.match(index, /id="ue-export-deploy-results"/);
 assert.match(editor, /const\s+rightPanel\s*=\s*document\.querySelector\(\s*["']#right-ui-panel["']\s*\)/);
 assert.match(editor, /const\s+rightPanelResizeHandle\s*=\s*document\.querySelector\(\s*["']#right-panel-resize-handle["']\s*\)/);
 assert.match(editor, /const\s+cameraSpeedInput\s*=\s*document\.querySelector\(\s*["']#camera-speed-input["']\s*\)/);
@@ -420,6 +457,42 @@ assert.match(editor, /button\.classList\.toggle\(\s*["']is-selected["'],\s*item\
 assert.match(editor, /function\s+selectSceneOutlinerItem\(itemId\)/);
 assert.match(editor, /function\s+getSelectableSceneObjects\(\)/);
 assert.match(editor, /return\s+\[\.\.\.placedAssets,\s*\.\.\.ueRockSync\.group\.children\]/);
+assert.match(editor, /function\s+getEditableAssetCollection\(asset\)/);
+assert.match(editor, /ueRockSync\.group\.children\.includes\(asset\)/);
+assert.match(editor, /function\s+duplicateImportedAsset\(sourceAsset\)/);
+assert.match(editor, /sourceAsset\.clone\(true\)/);
+assert.match(editor, /collection\.splice\(safeIndex,\s*0,\s*asset\)/);
+assert.match(
+  editor,
+  /function\s+prepareTransformDuplicate\(event\)[\s\S]*duplicatedTransformAsset\s*=\s*duplicateAssetForTransform\(selectedAsset\)[\s\S]*duplicateOnTransformDrag\s*=\s*true/,
+  "Alt-drag duplication should attach the duplicate before TransformControls records the drag start"
+);
+assert.match(
+  editor,
+  /duplicatedTransformAsset\s*=\s*duplicateOnTransformDrag\s*&&\s*selectedAsset[\s\S]*duplicatedTransformAsset\s*\|\|/,
+  "TransformControls mouseDown should reuse the duplicate prepared during pointerdown"
+);
+assert.match(editor, /function\s+duplicateSelectedAsset\(\)/);
+assert.match(editor, /pushUndo\(\{\s*type:\s*["']duplicate["'],\s*asset:\s*duplicate\s*\}\)/);
+assert.match(editor, /let\s+copiedAsset\s*=\s*null/);
+assert.match(editor, /function\s+copySelectedAsset\(\)/);
+assert.match(editor, /copiedAsset\s*=\s*selectedAsset/);
+assert.match(editor, /function\s+pasteCopiedAsset\(\)/);
+assert.match(
+  editor,
+  /\(event\.ctrlKey\s*\|\|\s*event\.metaKey\)\s*&&\s*code\s*===\s*["']keyd["'][\s\S]*duplicateSelectedAsset\(\)/,
+  "Ctrl/Cmd+D should duplicate the selected local or imported model"
+);
+assert.match(
+  editor,
+  /\(event\.ctrlKey\s*\|\|\s*event\.metaKey\)\s*&&\s*code\s*===\s*["']keyc["'][\s\S]*copySelectedAsset\(\)/,
+  "Ctrl/Cmd+C should copy the selected local or imported model into the editor clipboard"
+);
+assert.match(
+  editor,
+  /\(event\.ctrlKey\s*\|\|\s*event\.metaKey\)\s*&&\s*code\s*===\s*["']keyv["'][\s\S]*pasteCopiedAsset\(\)/,
+  "Ctrl/Cmd+V should paste the copied local or imported model"
+);
 assert.match(editor, /raycaster\.intersectObjects\(getSelectableSceneObjects\(\),\s*true\)/);
 assert.match(editor, /const\s+ueRockSync\s*=\s*createUnrealRockSyncController\(/);
 assert.match(editor, /manifestUrl:\s*["']\/ue-sync\/scene\.manifest\.json["']/);
@@ -439,6 +512,16 @@ assert.match(editor, /function\s+renderLocalSetupChecks\(payload\)/);
 assert.match(editor, /function\s+renderLocalSetupCheckFailure\(error\)/);
 assert.match(editor, /async\s+function\s+runLocalSetupCheck\(\)/);
 assert.match(editor, /fetch\(\s*["']\/api\/environment-check["']/);
+assert.match(editor, /function\s+formatModelDegrees\(value\)/);
+assert.match(editor, /THREE\.MathUtils\.radToDeg\(value\)/);
+assert.match(editor, /function\s+formatModelScale\(value\)/);
+assert.match(editor, /modelRotationX\.textContent\s*=\s*formatModelDegrees\(selectedAsset\.rotation\.x\)/);
+assert.match(editor, /modelScaleX\.textContent\s*=\s*formatModelScale\(selectedAsset\.scale\.x\)/);
+assert.match(editor, /function\s+setUeExportDeployBusy\(busy\)/);
+assert.match(editor, /function\s+renderUeExportDeployResult\(payload\)/);
+assert.match(editor, /async\s+function\s+deployUeExportTools\(\)/);
+assert.match(editor, /fetch\(\s*["']\/api\/deploy-ue-export-tools["'][\s\S]*method:\s*["']POST["']/);
+assert.match(editor, /uprojectPath:\s*ueProjectPathInput\?\.value\s*\|\|\s*["']["']/);
 assert.match(editor, /function\s+adaptImportedSceneToManifest\(manifest\)/);
 assert.match(editor, /gridMaterial\.uniforms\.fadeDistance\.value/);
 assert.match(editor, /camera\.far\s*=\s*Math\.max\(camera\.far,\s*nextGridSize\s*\*\s*2\)/);
@@ -446,6 +529,7 @@ assert.match(editor, /function\s+updateUnrealRockSyncStatus\(status\)/);
 assert.match(editor, /ueRockSyncButton\?\.addEventListener\(\s*["']click["']/);
 assert.match(editor, /ueSemanticModeButton\?\.addEventListener\(\s*["']click["']/);
 assert.match(editor, /localSetupCheckButton\?\.addEventListener\(\s*["']click["'],\s*runLocalSetupCheck\)/);
+assert.match(editor, /deployUeExportToolsButton\?\.addEventListener\(\s*["']click["'],\s*deployUeExportTools\)/);
 assert.match(editor, /const\s+rightPanelMinWidth\s*=\s*52/);
 assert.match(editor, /const\s+rightPanelDefaultWidth\s*=\s*280/);
 assert.match(editor, /const\s+rightPanelColumnWidth\s*=\s*228/);
@@ -496,6 +580,11 @@ assert.match(
   editor,
   /if\s*\(action\.type\s*===\s*["']road-draw["']\)[\s\S]*scene\.remove\(tile\.mesh\)[\s\S]*roadTiles\.delete\(tile\.key\)/,
   "Undoing a road stroke should remove its road meshes and clear their occupied cells"
+);
+assert.doesNotMatch(
+  editor,
+  /if\s*\(action\.type\s*===\s*["']transform["']\)[\s\S]{0,160}placedAssets\.includes\(action\.asset\)/,
+  "Imported UE models should support transform undo, so transform undo cannot be limited to placedAssets"
 );
 assert.match(editor, /function\s+setRoadDrawingMode\(active\)/);
 assert.match(editor, /roadButton\?\.classList\.toggle\(\s*["']is-active["'],\s*roadDrawingMode\s*\)/);
@@ -654,7 +743,8 @@ assert.match(editor, /document\.querySelector\(\s*["']#left-ui-panel["']\s*\)/);
 assert.match(editor, /document\.querySelector\(\s*["']#right-ui-panel["']\s*\)/);
 assert.match(editor, /renderer\.setSize\(initialViewport\.width,\s*initialViewport\.height\)/);
 assert.match(editor, /renderer\.shadowMap\.enabled\s*=\s*true/);
-assert.match(editor, /renderer\.shadowMap\.type\s*=\s*THREE\.PCFSoftShadowMap/);
+assert.match(editor, /renderer\.shadowMap\.type\s*=\s*THREE\.BasicShadowMap/);
+assert.match(editor, /directionalLight\.shadow\.radius\s*=\s*0/);
 assert.match(editor, /renderer\.setSize\(viewport\.width,\s*viewport\.height\)/);
 assert.match(
   editor,
@@ -686,7 +776,7 @@ assert.match(editor, /scene\.add\(gridOriginXLine,\s*gridOriginYLine\)/);
 assert.match(editor, /transformControls\.setScaleSnap\(scaleSnapSize\)/);
 assert.match(editor, /function\s+configureAssetShadows\(asset\)/);
 assert.match(editor, /child\.castShadow\s*=\s*true/);
-assert.match(editor, /child\.receiveShadow\s*=\s*true/);
+assert.match(editor, /child\.receiveShadow\s*=\s*false/);
 assert.match(editor, /child\.userData\.lightHelper/);
 assert.match(editor, /configureAssetShadows\(asset\)/);
 assert.match(editor, /function\s+syncSunLightDirection\(asset\)/);
