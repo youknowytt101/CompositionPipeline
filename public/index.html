@@ -445,6 +445,22 @@
         line-height: 1.2;
       }
 
+      .settings-section-title {
+        margin: 4px 0 -2px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .settings-section-title:first-of-type {
+        padding-top: 0;
+        border-top: none;
+      }
+
       .settings-field {
         display: flex;
         flex-direction: column;
@@ -468,6 +484,14 @@
       .camera-range {
         width: 100%;
         accent-color: #ffffff;
+      }
+
+      .settings-checkbox {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: #ffffff;
+        cursor: pointer;
       }
 
       .settings-color {
@@ -810,7 +834,9 @@
           role="tabpanel"
           aria-label="camera settings"
         >
-          <h2 class="settings-heading">Camera</h2>
+          <h2 class="settings-heading">视口 Viewport</h2>
+
+          <div class="settings-section-title">Camera</div>
 
           <label class="settings-field" for="camera-fov-range">
             <span class="settings-label-row">
@@ -841,6 +867,8 @@
             </div>
           </div>
 
+          <div class="settings-section-title">Environment</div>
+
           <div class="settings-field">
             <div class="settings-label-row">
               <span>Environment Color</span>
@@ -869,6 +897,29 @@
               value="0.5"
             />
           </label>
+
+
+          <div class="settings-section-title">Sky</div>
+
+          <div class="settings-field">
+            <label class="settings-label-row" for="sky-enabled">
+              <span>Enable Sky</span>
+              <input id="sky-enabled" class="settings-checkbox" type="checkbox" />
+            </label>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-label-row">
+              <span>Sky Color</span>
+              <input
+                id="sky-color-input"
+                class="settings-color"
+                type="color"
+                value="#87b6e8"
+                aria-label="sky color"
+              />
+            </div>
+          </div>
         </section>
         <section
           id="model-edit-panel"
@@ -1063,13 +1114,13 @@
             aria-controls="scene-outliner-panel"
           ></sl-icon-button>
         </sl-tooltip>
-        <sl-tooltip content="Camera" placement="right">
+        <sl-tooltip content="视口" placement="right">
           <sl-icon-button
             id="left-camera-tab"
             class="left-tab-button is-active"
-            name="camera-video"
+            name="scene-globe"
             data-left-panel-tab="camera"
-            label="Camera"
+            label="视口"
             role="tab"
             aria-selected="true"
             aria-controls="camera-settings-panel"

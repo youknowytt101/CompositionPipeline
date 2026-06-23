@@ -95,6 +95,33 @@ export function createEditor() {
 
   applyEnvironmentColor();
 
+  // Default scene background, restored whenever the sky box is disabled.
+  const defaultBackgroundColor = new THREE.Color(0xffffff);
+
+  // Sky box: minimal flat fill — just drives scene.background's solid color.
+  const skySettings = {
+    enabled: false,
+    color: new THREE.Color(0x87b6e8)
+  };
+
+  function applySky() {
+    scene.background = skySettings.enabled
+      ? skySettings.color.clone()
+      : defaultBackgroundColor.clone();
+  }
+
+  function setSkyEnabled(enabled) {
+    skySettings.enabled = Boolean(enabled);
+    applySky();
+  }
+
+  function setSkyColor(hex) {
+    skySettings.color.set(hex);
+    applySky();
+  }
+
+  applySky();
+
   const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
   directionalLight.position.set(8, 14, 10);
   directionalLight.castShadow = true;
@@ -296,6 +323,8 @@ export function createEditor() {
   const envColorInput = document.querySelector("#env-color-input");
   const envIntensityRange = document.querySelector("#env-intensity-range");
   const envIntensityValue = document.querySelector("#env-intensity-value");
+  const skyEnabledInput = document.querySelector("#sky-enabled");
+  const skyColorInput = document.querySelector("#sky-color-input");
   const cameraPreviewList = document.querySelector("#camera-preview-list");
   const dragPreview = document.querySelector("#drag-preview");
   const raycaster = new THREE.Raycaster();
@@ -2314,6 +2343,24 @@ export function createEditor() {
   if (envIntensityValue) {
     envIntensityValue.textContent = environmentSettings.intensity.toFixed(2);
   }
+
+
+  // Sky box controls
+  if (skyEnabledInput) {
+    skyEnabledInput.checked = skySettings.enabled;
+    skyEnabledInput.addEventListener("change", () => {
+      setSkyEnabled(skyEnabledInput.checked);
+      render();
+    });
+  }
+  if (skyColorInput) {
+    skyColorInput.value = `#${skySettings.color.getHexString()}`;
+    skyColorInput.addEventListener("input", () => {
+      setSkyColor(skyColorInput.value);
+      render();
+    });
+  }
+
   aspectPresetButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const preset = button.dataset.aspectPreset;

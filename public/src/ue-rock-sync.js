@@ -738,6 +738,10 @@ export function createUnrealRockSyncController({
       await loadSemanticRules(manifest.semanticRulesUrl || semanticRulesUrl);
       clear();
 
+      // Per-object rendering: each imported actor is an independent Group with
+      // real Mesh children, so it can be individually selected, transformed, and
+      // re-classified. (An earlier InstancedMesh path was reverted because the
+      // composition workflow needs per-object editing.)
       for (const instance of manifest.instances) {
         const object = new THREE.Group();
         const meshInstances = instance.children.length ? instance.children : [instance];
@@ -746,7 +750,6 @@ export function createUnrealRockSyncController({
         object.name = instance.id;
         object.userData.assetId = instance.id;
         object.userData.assetType = assetType;
-        // Minimal manifest only carries label (display), semantic and colorId.
         copyImportedMetadata(object, {
           label: instance.label,
           semantic: instance.semantic,
@@ -783,8 +786,14 @@ export function createUnrealRockSyncController({
             componentObject.name = meshInstance.id || `${instance.id}-component`;
             copyImportedMetadata(componentObject, {
               label: meshInstance.label,
+              name: meshInstance.name,
+              type: meshInstance.type,
+              meshAssetPath: meshInstance.meshAssetPath,
+              materialSlots: meshInstance.materialSlots,
+              tags: meshInstance.tags,
               semantic: semanticMetadata.semantic,
-              colorId: semanticMetadata.colorId
+              colorId: semanticMetadata.colorId,
+              sourceMetadata: meshInstance.sourceMetadata
             });
             applySceneTransform(componentObject, meshInstance, THREE, {
               scaleMode: "mesh",
@@ -828,6 +837,40 @@ export function createUnrealRockSyncController({
 
   setStatus({ state: "idle", message: "Ready to sync UE rocks" });
 
+  // Re-classify an imported object: overwrite the semantic on every mesh under
+  // it, then re-apply materials so semantic-color mode reflects the new class.
+  function setObjectSemantic(object, semantic) {
+    if (!object) {
+      return;
+    }
+
+    const semanticClass = semanticRules.classes[semantic] || semanticRules.classes[unclassifiedSemantic];
+    const colorId = normalizeOptionalNumber(semanticClass?.id) ?? null;
+
+    object.userData.semantic = semantic;
+    object.userData.colorId = colorId;
+    object.traverse((child) => {
+      if (!child.isMesh && !child.isObject3D) {
+        return;
+      }
+      if (child.userData.ueSyncSemanticMetadata) {
+        child.userData.ueSyncSemanticMetadata.semantic = semantic;
+        child.userData.ueSyncSemanticMetadata.colorId = colorId;
+      }
+      child.userData.semantic = semantic;
+      child.userData.colorId = colorId;
+      if (child.isMesh) {
+        applyMaterialModeToMesh(child);
+      }
+    });
+
+    render();
+  }
+
+  function getSemanticClasses() {
+    return Object.keys(semanticRules.classes);
+  }
+
   return {
     clear,
     group,
@@ -837,6 +880,8 @@ export function createUnrealRockSyncController({
       applyDisplayMode();
       render();
     },
+    setObjectSemantic,
+    getSemanticClasses,
     sync
   };
 }
