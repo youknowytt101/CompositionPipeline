@@ -33,7 +33,7 @@
         --right-panel-handle-width: 10px;
         --editor-panel-bg: rgba(38, 38, 38, 0.96);
         --editor-panel-border: rgba(255, 255, 255, 0.12);
-        --camera-preview-border-width: 3px;
+        --camera-preview-border-width: 1px;
         --runtime-aspect-ratio: calc(16 / 9);
         --sl-border-radius-medium: 6px;
         --sl-focus-ring-color: rgba(255, 255, 255, 0.5);
@@ -579,6 +579,51 @@
         outline-offset: 2px;
       }
 
+      .right-panel-guide-rail {
+        position: absolute;
+        top: 12px;
+        left: 0;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        box-sizing: border-box;
+        width: var(--right-panel-min-width);
+        padding: 0;
+      }
+
+      .right-panel-guide-rail sl-tooltip {
+        display: block;
+        width: 100%;
+      }
+
+      .right-panel-guide-button::part(base),
+      .right-panel-guide-button {
+        width: 100%;
+        height: 38px;
+        border-radius: 0;
+      }
+
+      .right-panel-guide-button::part(base) {
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .right-panel-guide-button::part(base):hover {
+        color: rgba(255, 255, 255, 0.98);
+      }
+
+      .right-panel-guide-button.is-active {
+        background: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+      }
+
+      .right-panel-guide-button.is-active::part(base) {
+        color: #ffffff;
+      }
+
       body.is-resizing-right-panel,
       body.is-resizing-right-panel * {
         cursor: ew-resize !important;
@@ -587,7 +632,7 @@
 
       .right-panel-content {
         display: grid;
-        grid-template-columns: repeat(4, var(--right-panel-column-width));
+        grid-template-columns: repeat(5, var(--right-panel-column-width));
         grid-auto-rows: 100%;
         box-sizing: border-box;
         width: 100%;
@@ -596,7 +641,8 @@
         overflow: hidden;
       }
 
-      .camera-preview-list {
+      .camera-preview-list,
+      .camera-ui-list {
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -613,18 +659,30 @@
         border-left: 1px solid var(--editor-panel-border);
       }
 
+      .camera-ui-column {
+        padding: 0;
+        border-left: 0;
+        box-shadow: inset 1px 0 0 var(--editor-panel-border);
+      }
+
       body.is-right-panel-minimized .right-panel-content,
       body.is-right-panel-minimized .camera-preview-list {
         display: none;
       }
 
-      .camera-preview-card {
+      .camera-preview-card,
+      .camera-ui-card {
+        position: relative;
         width: 100%;
         aspect-ratio: var(--preview-aspect-ratio, var(--runtime-aspect-ratio));
         box-sizing: border-box;
         overflow: hidden;
-        border: var(--camera-preview-border-width) solid #ff4d4d;
+        border: var(--camera-preview-border-width) solid #000;
         background: #2b2b2b;
+      }
+
+      .camera-ui-card {
+        background: transparent;
       }
 
       .camera-preview-card canvas {
@@ -632,6 +690,137 @@
         width: calc(100% + var(--camera-preview-border-width) * 2);
         height: calc(100% + var(--camera-preview-border-width) * 2);
         margin: calc(var(--camera-preview-border-width) * -1);
+      }
+
+      .camera-preview-guide-overlay {
+        --camera-guide-line-width: 0.5px;
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .camera-preview-guide {
+        display: none;
+        position: absolute;
+        inset: 0;
+      }
+
+      body.has-camera-guide-thirds .camera-preview-guide-thirds,
+      body.has-camera-guide-center .camera-preview-guide-center,
+      body.has-camera-guide-safe .camera-preview-guide-safe,
+      body.has-camera-guide-perspective .camera-preview-guide-perspective,
+      body.has-camera-guide-horizon .camera-preview-guide-horizon {
+        display: block;
+      }
+
+      .camera-preview-guide-line {
+        position: absolute;
+        background: #000;
+      }
+
+      .camera-preview-guide-line.is-vertical {
+        top: 0;
+        bottom: 0;
+        width: var(--camera-guide-line-width);
+        transform: translateX(calc(var(--camera-guide-line-width) / -2));
+      }
+
+      .camera-preview-guide-line.is-horizontal {
+        right: 0;
+        left: 0;
+        height: var(--camera-guide-line-width);
+        transform: translateY(calc(var(--camera-guide-line-width) / -2));
+      }
+
+      .camera-preview-guide-line.is-x-1 {
+        left: 33.333%;
+      }
+
+      .camera-preview-guide-line.is-x-2 {
+        left: 66.667%;
+      }
+
+      .camera-preview-guide-line.is-y-1 {
+        top: 33.333%;
+      }
+
+      .camera-preview-guide-line.is-y-2 {
+        top: 66.667%;
+      }
+
+      .camera-preview-guide-line.is-center-x {
+        left: 50%;
+      }
+
+      .camera-preview-guide-line.is-center-y {
+        top: 50%;
+      }
+
+      .camera-preview-guide-safe::before {
+        content: "";
+        position: absolute;
+        inset: 10%;
+        box-sizing: border-box;
+        border: var(--camera-guide-line-width) solid #000;
+      }
+
+      .camera-preview-guide-perspective {
+        pointer-events: auto;
+      }
+
+      .camera-preview-perspective-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+
+      .camera-preview-perspective-link {
+        stroke: #000;
+        stroke-width: var(--camera-guide-line-width);
+        vector-effect: non-scaling-stroke;
+      }
+
+      .camera-preview-perspective-dot {
+        position: absolute;
+        width: 16px;
+        height: 9px;
+        border: 1px solid #ffd400;
+        border-radius: 1px;
+        background: transparent;
+        cursor: grab;
+        transform: translate(-50%, -50%);
+        touch-action: none;
+      }
+
+      .camera-preview-perspective-dot:active {
+        cursor: grabbing;
+      }
+
+      .camera-preview-guide-horizon {
+        pointer-events: auto;
+      }
+
+      .camera-preview-horizon-line {
+        position: absolute;
+        right: 0;
+        left: 0;
+        height: var(--camera-guide-line-width);
+        background: #000;
+        transform: translateY(calc(var(--camera-guide-line-width) / -2));
+      }
+
+      .camera-preview-horizon-hit-area {
+        position: absolute;
+        right: 0;
+        left: 0;
+        height: 18px;
+        cursor: ns-resize;
+        transform: translateY(-50%);
+        touch-action: none;
       }
 
       .asset-toolbar,
@@ -1175,6 +1364,48 @@
     <div id="drag-preview" class="drag-preview" aria-hidden="true"></div>
     <div id="play-viewport-frame" class="play-viewport-frame" aria-hidden="true"></div>
     <aside id="right-ui-panel" class="right-ui-panel" aria-label="right tools">
+      <div id="right-panel-guide-rail" class="right-panel-guide-rail" aria-label="camera composition guides">
+        <sl-tooltip content="Thirds">
+          <sl-icon-button
+            class="right-panel-guide-button"
+            name="grid-3x3"
+            data-camera-guide="thirds"
+            label="Thirds"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="Center">
+          <sl-icon-button
+            class="right-panel-guide-button"
+            name="crosshair"
+            data-camera-guide="center"
+            label="Center"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="Safe Frame">
+          <sl-icon-button
+            class="right-panel-guide-button"
+            name="safe-frame"
+            data-camera-guide="safe"
+            label="Safe Frame"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="Perspective Point">
+          <sl-icon-button
+            class="right-panel-guide-button"
+            name="perspective-dot"
+            data-camera-guide="perspective"
+            label="Perspective Point"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="Horizon">
+          <sl-icon-button
+            class="right-panel-guide-button"
+            name="horizon-line"
+            data-camera-guide="horizon"
+            label="Horizon"
+          ></sl-icon-button>
+        </sl-tooltip>
+      </div>
       <div
         id="right-panel-resize-handle"
         class="right-panel-resize-handle"
@@ -1190,9 +1421,11 @@
         <div id="camera-preview-list" class="camera-preview-list" aria-label="captured camera previews"></div>
         <div
           id="right-panel-secondary-column"
-          class="right-panel-secondary-column"
+          class="right-panel-secondary-column camera-ui-column"
           aria-label="secondary right panel"
-        ></div>
+        >
+          <div id="camera-ui-list" class="camera-ui-list" aria-label="camera ui containers"></div>
+        </div>
         <div
           id="right-panel-tertiary-column"
           class="right-panel-secondary-column"
@@ -1202,6 +1435,11 @@
           id="right-panel-quaternary-column"
           class="right-panel-secondary-column"
           aria-label="quaternary right panel"
+        ></div>
+        <div
+          id="right-panel-quinary-column"
+          class="right-panel-secondary-column"
+          aria-label="quinary right panel"
         ></div>
       </div>
     </aside>

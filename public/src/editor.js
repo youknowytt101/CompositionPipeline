@@ -26,7 +26,7 @@ const unrealCentimetersPerSceneUnit = 100;
 const rightPanelMinWidth = 52;
 const rightPanelDefaultWidth = 280;
 const rightPanelColumnWidth = 228;
-const rightPanelMaxColumns = 4;
+const rightPanelMaxColumns = 5;
 
 export function createEditor() {
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -326,6 +326,8 @@ export function createEditor() {
   const skyEnabledInput = document.querySelector("#sky-enabled");
   const skyColorInput = document.querySelector("#sky-color-input");
   const cameraPreviewList = document.querySelector("#camera-preview-list");
+  const cameraUiList = document.querySelector("#camera-ui-list");
+  const cameraGuideButtons = Array.from(document.querySelectorAll("[data-camera-guide]"));
   const dragPreview = document.querySelector("#drag-preview");
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -360,6 +362,7 @@ export function createEditor() {
   let roadDrawingMode = false;
   let roadDrawing = false;
   let roadDrawingTiles = [];
+  const activeCameraGuides = new Set();
   const undoStack = [];
 
   const transformControls = new TransformControls(camera, renderer.domElement);
@@ -1307,6 +1310,318 @@ export function createEditor() {
     placedAssets.forEach(syncSunLightDirection);
   }
 
+  function setCameraGuideMode(mode, enabled) {
+    if (!mode) {
+      return;
+    }
+
+    if (enabled) {
+      activeCameraGuides.add(mode);
+    } else {
+      activeCameraGuides.delete(mode);
+    }
+
+    document.body.classList.toggle(`has-camera-guide-${mode}`, activeCameraGuides.has(mode));
+    cameraGuideButtons.forEach((button) => {
+      const active = activeCameraGuides.has(button.dataset.cameraGuide);
+
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", `${active}`);
+    });
+  }
+
+  function toggleCameraGuideMode(mode) {
+    setCameraGuideMode(mode, !activeCameraGuides.has(mode));
+  }
+
+  function createGuideLine(...classNames) {
+    const line = document.createElement("span");
+
+    line.classList.add("camera-preview-guide-line", ...classNames);
+    return line;
+  }
+
+  const perspectiveFrameSize = { width: 16, height: 9 };
+  const perspectiveFrameCorners = [
+    [-0.5, -0.5],
+    [0.5, -0.5],
+    [0.5, 0.5],
+    [-0.5, 0.5]
+  ];
+  const perspectiveScreenCorners = [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 1]
+  ];
+  const horizonForward = new THREE.Vector3();
+  const horizonRight = new THREE.Vector3();
+  const horizonPointA = new THREE.Vector3();
+  const horizonPointB = new THREE.Vector3();
+  const horizonLookTarget = new THREE.Vector3();
+  const worldUp = new THREE.Vector3(0, 0, 1);
+
+  function updatePerspectiveGuide(guide) {
+    const { point, dot, links } = guide;
+    const rect = guide.element.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    const centerX = point.x * width;
+    const centerY = point.y * height;
+    const x = `${point.x * 100}%`;
+    const y = `${point.y * 100}%`;
+
+    dot.style.left = x;
+    dot.style.top = y;
+    links.forEach((link, index) => {
+      const [frameX, frameY] = perspectiveFrameCorners[index];
+      const [screenX, screenY] = perspectiveScreenCorners[index];
+
+      link.setAttribute("x1", `${centerX + frameX * perspectiveFrameSize.width}`);
+      link.setAttribute("y1", `${centerY + frameY * perspectiveFrameSize.height}`);
+      link.setAttribute("x2", `${screenX * width}`);
+      link.setAttribute("y2", `${screenY * height}`);
+    });
+  }
+
+  function setPerspectiveGuidePointFromEvent(guide, event) {
+    const rect = guide.element.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    const halfWidth = perspectiveFrameSize.width / 2 / width;
+    const halfHeight = perspectiveFrameSize.height / 2 / height;
+
+    guide.point.x = THREE.MathUtils.clamp((event.clientX - rect.left) / width, halfWidth, 1 - halfWidth);
+    guide.point.y = THREE.MathUtils.clamp((event.clientY - rect.top) / height, halfHeight, 1 - halfHeight);
+    updatePerspectiveGuide(guide);
+  }
+
+  function createPerspectiveGuideLink() {
+    const link = document.createElementNS("http://www.w3.org/2000/svg", "line");
+
+    link.classList.add("camera-preview-perspective-link");
+    return link;
+  }
+
+  function createPerspectiveGuide() {
+    const element = document.createElement("div");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const dot = document.createElement("span");
+    const guide = {
+      dot,
+      element,
+      links: perspectiveFrameCorners.map(() => createPerspectiveGuideLink()),
+      point: { x: 0.5, y: 0.5 },
+      pointerId: null
+    };
+
+    element.className = "camera-preview-guide camera-preview-guide-perspective";
+    svg.classList.add("camera-preview-perspective-svg");
+    dot.classList.add("camera-preview-perspective-dot");
+    svg.append(...guide.links);
+    element.append(svg, dot);
+    updatePerspectiveGuide(guide);
+    new ResizeObserver(() => updatePerspectiveGuide(guide)).observe(element);
+
+    dot.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      guide.pointerId = event.pointerId;
+      dot.setPointerCapture(event.pointerId);
+      setPerspectiveGuidePointFromEvent(guide, event);
+    });
+
+    dot.addEventListener("pointermove", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setPerspectiveGuidePointFromEvent(guide, event);
+    });
+
+    dot.addEventListener("pointerup", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      guide.pointerId = null;
+      dot.releasePointerCapture(event.pointerId);
+    });
+
+    dot.addEventListener("pointercancel", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      guide.pointerId = null;
+    });
+
+    return element;
+  }
+
+  function updateHorizonGuide(guide) {
+    const y = `${guide.position * 100}%`;
+
+    guide.line.style.top = y;
+    guide.hitArea.style.top = y;
+  }
+
+  function setHorizonGuideFromEvent(guide, event) {
+    const rect = guide.element.getBoundingClientRect();
+    const height = Math.max(1, rect.height);
+
+    guide.position = THREE.MathUtils.clamp((event.clientY - rect.top) / height, 0, 1);
+    updateHorizonGuide(guide);
+
+    if (guide.camera) {
+      setCameraPitchFromHorizonPosition(guide.camera, guide.position);
+      render();
+    }
+  }
+
+  function calculateCameraHorizonPosition(camera) {
+    if (!camera) {
+      return 0.5;
+    }
+
+    camera.updateMatrixWorld(true);
+    camera.getWorldDirection(horizonForward);
+    horizonForward.z = 0;
+
+    if (horizonForward.lengthSq() < 0.000001) {
+      return 0.5;
+    }
+
+    horizonForward.normalize();
+    horizonRight.crossVectors(horizonForward, worldUp).normalize();
+    horizonPointA
+      .copy(camera.position)
+      .addScaledVector(horizonForward, 1000)
+      .addScaledVector(horizonRight, -1000);
+    horizonPointB
+      .copy(camera.position)
+      .addScaledVector(horizonForward, 1000)
+      .addScaledVector(horizonRight, 1000);
+    horizonPointA.z = camera.position.z;
+    horizonPointB.z = camera.position.z;
+    horizonPointA.project(camera);
+    horizonPointB.project(camera);
+
+    return THREE.MathUtils.clamp((2 - horizonPointA.y - horizonPointB.y) / 4, 0, 1);
+  }
+
+  function setCameraPitchFromHorizonPosition(camera, position) {
+    if (!camera) {
+      return;
+    }
+
+    camera.getWorldDirection(horizonForward);
+    const yaw = Math.atan2(horizonForward.y, horizonForward.x);
+    const pitch = THREE.MathUtils.clamp(
+      Math.atan((position * 2 - 1) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)),
+      -Math.PI / 2 + 0.02,
+      Math.PI / 2 - 0.02
+    );
+
+    horizonForward.set(
+      Math.cos(pitch) * Math.cos(yaw),
+      Math.cos(pitch) * Math.sin(yaw),
+      Math.sin(pitch)
+    );
+    horizonLookTarget.copy(camera.position).add(horizonForward);
+    camera.lookAt(horizonLookTarget);
+    camera.updateMatrixWorld(true);
+  }
+
+  function createHorizonGuide(position = 0.5, guideCamera = null) {
+    const element = document.createElement("div");
+    const line = document.createElement("span");
+    const hitArea = document.createElement("span");
+    const guide = {
+      camera: guideCamera,
+      element,
+      hitArea,
+      line,
+      pointerId: null,
+      position: THREE.MathUtils.clamp(position, 0, 1)
+    };
+
+    element.className = "camera-preview-guide camera-preview-guide-horizon";
+    line.classList.add("camera-preview-horizon-line");
+    hitArea.classList.add("camera-preview-horizon-hit-area");
+    element.append(line, hitArea);
+    updateHorizonGuide(guide);
+
+    hitArea.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      guide.pointerId = event.pointerId;
+      hitArea.setPointerCapture(event.pointerId);
+      setHorizonGuideFromEvent(guide, event);
+    });
+
+    hitArea.addEventListener("pointermove", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setHorizonGuideFromEvent(guide, event);
+    });
+
+    hitArea.addEventListener("pointerup", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      guide.pointerId = null;
+      hitArea.releasePointerCapture(event.pointerId);
+    });
+
+    hitArea.addEventListener("pointercancel", (event) => {
+      if (guide.pointerId !== event.pointerId) {
+        return;
+      }
+
+      guide.pointerId = null;
+    });
+
+    return element;
+  }
+
+  function createCameraPreviewGuideOverlay(previewCamera = null) {
+    const overlay = document.createElement("div");
+    const thirds = document.createElement("div");
+    const center = document.createElement("div");
+    const safe = document.createElement("div");
+    const perspective = createPerspectiveGuide();
+    const horizon = createHorizonGuide(calculateCameraHorizonPosition(previewCamera), previewCamera);
+
+    overlay.className = "camera-preview-guide-overlay";
+    thirds.className = "camera-preview-guide camera-preview-guide-thirds";
+    center.className = "camera-preview-guide camera-preview-guide-center";
+    safe.className = "camera-preview-guide camera-preview-guide-safe";
+    thirds.append(
+      createGuideLine("is-vertical", "is-x-1"),
+      createGuideLine("is-vertical", "is-x-2"),
+      createGuideLine("is-horizontal", "is-y-1"),
+      createGuideLine("is-horizontal", "is-y-2")
+    );
+    center.append(
+      createGuideLine("is-vertical", "is-center-x"),
+      createGuideLine("is-horizontal", "is-center-y")
+    );
+    overlay.append(thirds, center, safe, perspective, horizon);
+    return overlay;
+  }
+
   function resizeCapturedCameraPreview(preview) {
     const rect = preview.canvas.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width));
@@ -1315,10 +1630,24 @@ export function createEditor() {
     preview.width = width;
     preview.height = height;
     preview.renderer.setSize(width, height, false);
+    syncCameraUiCardLayout(preview.card, preview.uiCard);
   }
 
   function resizeCapturedCameraPreviews() {
     capturedCameraPreviews.forEach(resizeCapturedCameraPreview);
+  }
+
+  function syncCameraUiCardLayout(card, uiCard) {
+    if (!card || !uiCard) {
+      return;
+    }
+
+    const previewHeight = card.getBoundingClientRect().height;
+    if (!Number.isFinite(previewHeight) || previewHeight <= 0) {
+      return;
+    }
+
+    uiCard.style.height = `${previewHeight}px`;
   }
 
   function getPreviewRenderBounds(preview) {
@@ -1376,7 +1705,7 @@ export function createEditor() {
   }
 
   function capturePlayerCamera() {
-    if (!isPlayModeActive() || !cameraPreviewList) {
+    if (!isPlayModeActive() || !cameraPreviewList || !cameraUiList) {
       return false;
     }
 
@@ -1390,6 +1719,7 @@ export function createEditor() {
       camera.far
     );
     const card = document.createElement("div");
+    const uiCard = document.createElement("div");
     const previewCanvas = document.createElement("canvas");
     const previewRenderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -1404,8 +1734,12 @@ export function createEditor() {
 
     card.className = "camera-preview-card";
     card.style.setProperty("--preview-aspect-ratio", `${capturedAspect}`);
-    card.append(previewCanvas);
+    card.append(previewCanvas, createCameraPreviewGuideOverlay(capturedCamera));
     cameraPreviewList.append(card);
+    uiCard.className = "camera-ui-card";
+    uiCard.style.setProperty("--preview-aspect-ratio", `${capturedAspect}`);
+    cameraUiList.append(uiCard);
+    syncCameraUiCardLayout(card, uiCard);
 
     scene.add(capturedCamera);
     previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1415,8 +1749,10 @@ export function createEditor() {
 
     capturedCameraPreviews.push({
       aspect: capturedAspect,
+      card: card,
       camera: capturedCamera,
       canvas: previewCanvas,
+      uiCard: uiCard,
       width: 1,
       height: 1,
       renderer: previewRenderer
@@ -2404,6 +2740,12 @@ export function createEditor() {
   });
   localSetupCheckButton?.addEventListener("click", runLocalSetupCheck);
   deployUeExportToolsButton?.addEventListener("click", deployUeExportTools);
+  cameraGuideButtons.forEach((button) => {
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => {
+      toggleCameraGuideMode(button.dataset.cameraGuide);
+    });
+  });
   window.addEventListener("pointermove", updateRightPanelResize);
   window.addEventListener("pointerup", endRightPanelResize);
   window.addEventListener("pointercancel", endRightPanelResize);
