@@ -27,6 +27,8 @@ const rightPanelMinWidth = 52;
 const rightPanelDefaultWidth = 280;
 const rightPanelColumnWidth = 228;
 const rightPanelMaxColumns = 5;
+const depthVisualizationRange = 120;
+const depthVisualizationGamma = 0.65;
 
 export function createEditor() {
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -221,6 +223,39 @@ export function createEditor() {
     transparent: true,
     depthWrite: false,
     depthTest: true
+  });
+  const cameraDepthMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      cameraNear: { value: camera.near },
+      cameraFar: { value: depthVisualizationRange },
+      depthGamma: { value: depthVisualizationGamma }
+    },
+    vertexShader: `
+      varying float viewDepth;
+
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+        viewDepth = -mvPosition.z;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float cameraNear;
+      uniform float cameraFar;
+      uniform float depthGamma;
+
+      varying float viewDepth;
+
+      void main() {
+        float linearDepth = clamp((viewDepth - cameraNear) / max(cameraFar - cameraNear, 0.0001), 0.0, 1.0);
+        float depth = pow(smoothstep(0.0, 1.0, linearDepth), depthGamma);
+
+        gl_FragColor = vec4(vec3(depth), 1.0);
+      }
+    `,
+    depthTest: true,
+    depthWrite: true
   });
   const shadowReceiver = new THREE.Mesh(
     new THREE.PlaneGeometry(gridSize, gridSize, 1, 1),
@@ -1630,6 +1665,7 @@ export function createEditor() {
     preview.width = width;
     preview.height = height;
     preview.renderer.setSize(width, height, false);
+    preview.depthRenderer?.setSize(width, height, false);
     syncCameraUiCardLayout(preview.card, preview.uiCard);
   }
 
@@ -1700,8 +1736,46 @@ export function createEditor() {
       preview.renderer.setScissorTest(true);
       preview.renderer.render(scene, preview.camera);
       preview.renderer.setScissorTest(false);
+      renderDepthPreview(preview, previewBounds);
     });
     transformControls.visible = transformControlsVisible;
+  }
+
+  function renderDepthPreview(preview, previewBounds) {
+    if (!preview.depthRenderer) {
+      return;
+    }
+
+    const previousOverrideMaterial = scene.overrideMaterial;
+    const previousBackground = scene.background;
+
+    cameraDepthMaterial.uniforms.cameraNear.value = preview.camera.near;
+    cameraDepthMaterial.uniforms.cameraFar.value = Math.min(preview.camera.far, depthVisualizationRange);
+    cameraDepthMaterial.uniforms.depthGamma.value = depthVisualizationGamma;
+    scene.overrideMaterial = cameraDepthMaterial;
+    scene.background = null;
+
+    preview.depthRenderer.setScissorTest(false);
+    preview.depthRenderer.setViewport(0, 0, preview.width, preview.height);
+    preview.depthRenderer.clear();
+    preview.depthRenderer.setViewport(
+      previewBounds.left,
+      previewBounds.bottom,
+      previewBounds.width,
+      previewBounds.height
+    );
+    preview.depthRenderer.setScissor(
+      previewBounds.left,
+      previewBounds.bottom,
+      previewBounds.width,
+      previewBounds.height
+    );
+    preview.depthRenderer.setScissorTest(true);
+    preview.depthRenderer.render(scene, preview.camera);
+    preview.depthRenderer.setScissorTest(false);
+
+    scene.overrideMaterial = previousOverrideMaterial;
+    scene.background = previousBackground;
   }
 
   function capturePlayerCamera() {
@@ -1721,9 +1795,15 @@ export function createEditor() {
     const card = document.createElement("div");
     const uiCard = document.createElement("div");
     const previewCanvas = document.createElement("canvas");
+    const depthCanvas = document.createElement("canvas");
     const previewRenderer = new THREE.WebGLRenderer({
       antialias: true,
       canvas: previewCanvas,
+      preserveDrawingBuffer: true
+    });
+    const depthRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      canvas: depthCanvas,
       preserveDrawingBuffer: true
     });
 
@@ -1737,7 +1817,9 @@ export function createEditor() {
     card.append(previewCanvas, createCameraPreviewGuideOverlay(capturedCamera));
     cameraPreviewList.append(card);
     uiCard.className = "camera-ui-card";
+    depthCanvas.className = "camera-depth-canvas";
     uiCard.style.setProperty("--preview-aspect-ratio", `${capturedAspect}`);
+    uiCard.append(depthCanvas);
     cameraUiList.append(uiCard);
     syncCameraUiCardLayout(card, uiCard);
 
@@ -1746,12 +1828,16 @@ export function createEditor() {
     previewRenderer.shadowMap.enabled = renderer.shadowMap.enabled;
     previewRenderer.shadowMap.type = renderer.shadowMap.type;
     previewRenderer.setClearColor(0x2b2b2b, 1);
+    depthRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    depthRenderer.setClearColor(0xffffff, 1);
 
     capturedCameraPreviews.push({
       aspect: capturedAspect,
       card: card,
       camera: capturedCamera,
       canvas: previewCanvas,
+      depthCanvas: depthCanvas,
+      depthRenderer: depthRenderer,
       uiCard: uiCard,
       width: 1,
       height: 1,
