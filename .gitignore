@@ -2,3 +2,4 @@ __pycache__/
 *.py[cod]
 .codegraph/
 _codex_state.md
+public/ue-sync/

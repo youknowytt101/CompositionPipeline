@@ -22,7 +22,9 @@ for (const modulePath of [
   "public/src/camera-controls.js",
   "public/src/editor.js",
   "public/src/play-mode.js",
-  "public/src/selection-outline.js"
+  "public/src/selection-outline.js",
+  "public/src/ue-rock-sync.js",
+  "public/src/ui-components.js"
 ]) {
   assertFile(modulePath);
 }
@@ -40,8 +42,8 @@ assert.doesNotMatch(app, /TransformControls/);
 
 const index = read("public/index.html");
 assert.match(index, /sl-theme-dark/);
-assert.match(index, /@shoelace-style\/shoelace@2\.20\.1\/cdn\/themes\/dark\.css/);
-assert.match(index, /@shoelace-style\/shoelace@2\.20\.1\/cdn\/shoelace-autoloader\.js/);
+assert.doesNotMatch(index, /@shoelace-style\/shoelace/);
+assert.match(index, /<script type="module" src="\/src\/ui-components\.js\?v=local-ui"><\/script>/);
 assert.match(index, /<script type="module" src="\/app\.js\?v=right-panel-wide"><\/script>/);
 assert.match(index, /<sl-tooltip[^>]+content="Cube"/);
 assert.match(index, /<sl-icon-button[^>]+data-asset="cube"/);
@@ -77,39 +79,104 @@ assert.match(index, /right:\s*var\(--right-panel-width\)/);
 assert.match(index, /left:\s*var\(--side-panel-width\)/);
 assert.match(index, /box-shadow:\s*0\s+0\s+0\s+100vmax\s+rgba\(0,\s*0,\s*0,\s*0\.62\)/);
 assert.match(index, /--side-panel-width:\s*320px/);
-assert.match(index, /--right-panel-collapsed-width:\s*52px/);
+assert.match(index, /--left-panel-rail-width:\s*52px/);
+assert.match(index, /--right-panel-min-width:\s*52px/);
 assert.match(index, /--right-panel-default-width:\s*280px/);
 assert.match(index, /--right-panel-width:\s*var\(--right-panel-default-width\)/);
-assert.match(
-  index,
-  /--right-panel-column-width:\s*calc\(var\(--right-panel-default-width\)\s*-\s*var\(--right-panel-collapsed-width\)\)/,
-  "Right panel wide mode should preserve the default content column width"
-);
-assert.match(
-  index,
-  /--right-panel-expanded-width:\s*calc\(\s*var\(--right-panel-collapsed-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\+\s*var\(--right-panel-column-width\)\s*\)/,
-  "Expanded right panel width should fit four default-width columns plus the rail"
-);
+assert.match(index, /--right-panel-column-width:\s*228px/);
+assert.match(index, /--right-panel-handle-width:\s*10px/);
 assert.match(index, /--runtime-aspect-ratio:\s*calc\(16\s*\/\s*9\)/);
 assert.match(index, /id="left-ui-panel"/);
 assert.match(index, /id="right-ui-panel"/);
-assert.match(index, /id="right-panel-rail"/);
-assert.match(index, /id="right-panel-toggle"/);
-assert.match(index, /id="right-panel-wide-toggle"/);
-assert.match(index, /data-panel-tool="toggle-right-panel"/);
-assert.match(index, /data-panel-tool="toggle-right-panel-width"/);
-assert.match(index, /<sl-tooltip[^>]+content="统一展开"[^>]*>[\s\S]*id="right-panel-wide-toggle"/);
-assert.match(index, /<sl-icon-button[^>]+id="right-panel-wide-toggle"[^>]+label="统一展开"/);
-assert.match(index, /aria-expanded="true"/);
-assert.match(index, /aria-pressed="false"/);
-assert.match(index, /class="right-panel-rail"/);
-assert.match(index, /\.right-panel-rail\s*\{/);
-assert.match(index, /\.right-panel-toggle::part\(base\)/);
-assert.match(index, /body\.is-right-panel-wide\s*\{[\s\S]*--right-panel-width:\s*var\(--right-panel-expanded-width\)/);
-assert.match(index, /body\.is-right-panel-collapsed\s*\{[\s\S]*--right-panel-width:\s*var\(--right-panel-collapsed-width\)/);
-assert.match(index, /body\.is-right-panel-collapsed\s+\.camera-preview-list\s*\{[\s\S]*display:\s*none/);
+assert.match(index, /id="left-panel-content"/);
+assert.match(index, /class="left-panel-content"/);
+assert.match(index, /id="left-tab-rail"/);
+assert.match(index, /class="left-tab-rail"/);
+assert.match(index, /role="tablist"/);
+assert.match(index, /aria-orientation="vertical"/);
+assert.match(index, /id="left-camera-tab"/);
+assert.match(index, /class="left-tab-button is-active"/);
+assert.match(index, /data-left-panel-tab="camera"/);
+assert.match(index, /aria-controls="camera-settings-panel"/);
+assert.match(index, /aria-selected="true"/);
+assert.match(index, /id="left-model-edit-tab"/);
+assert.match(index, /data-left-panel-tab="model-edit"/);
+assert.match(index, /aria-controls="model-edit-panel"/);
+assert.match(index, /aria-selected="false"/);
+assert.match(index, /id="left-terrain-tab"/);
+assert.match(index, /data-left-panel-tab="terrain"/);
+assert.match(index, /aria-controls="terrain-panel"/);
+assert.match(index, /aria-selected="false"/);
+assert.match(index, /id="left-unreal5-tab"/);
+assert.match(index, /data-left-panel-tab="unreal5"/);
+assert.match(index, /name="unreal5"/);
+assert.match(index, /aria-controls="unreal5-panel"/);
+assert.match(index, /aria-selected="false"/);
+assert.match(index, /id="left-scene-outliner-tab"/);
+assert.match(index, /data-left-panel-tab="scene-outliner"/);
+assert.match(index, /name="list-tree"/);
+assert.match(index, /aria-controls="scene-outliner-panel"/);
+assert.match(index, /aria-selected="false"/);
+assert.match(
+  index,
+  /id="left-model-edit-tab"[\s\S]*id="left-terrain-tab"[\s\S]*id="left-unreal5-tab"[\s\S]*id="left-scene-outliner-tab"[\s\S]*id="left-camera-tab"/,
+  "The left panel tabs should appear as model edit, terrain, unreal 5, scene outliner, then camera"
+);
+assert.match(index, /id="right-panel-resize-handle"/);
+assert.match(index, /class="right-panel-resize-handle"/);
+assert.match(index, /role="separator"/);
+assert.match(index, /aria-orientation="vertical"/);
+assert.match(index, /aria-valuemin="52"/);
+assert.doesNotMatch(index, /id="right-panel-toggle"/);
+assert.doesNotMatch(index, /id="right-panel-wide-toggle"/);
+assert.doesNotMatch(index, /data-panel-tool="toggle-right-panel-width"/);
+assert.match(index, /\.right-panel-resize-handle\s*\{/);
+assert.match(index, /cursor:\s*ew-resize/);
+assert.match(index, /touch-action:\s*none/);
+const resizeHandleBeforeRule = index.match(/\.right-panel-resize-handle::before\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+assert.match(resizeHandleBeforeRule, /width:\s*4px/);
+assert.match(resizeHandleBeforeRule, /height:\s*56px/);
+assert.doesNotMatch(resizeHandleBeforeRule, /transition:/);
+assert.doesNotMatch(index, /\.right-panel-resize-handle:hover::before/);
+assert.match(index, /body\.is-resizing-right-panel/);
+assert.match(index, /body\.is-right-panel-minimized\s+\.camera-preview-list\s*\{[\s\S]*display:\s*none/);
 assert.match(index, /id="camera-preview-list"/);
 assert.match(index, /id="camera-settings-panel"/);
+assert.match(index, /data-left-panel-panel="camera"/);
+assert.match(index, /id="model-edit-panel"/);
+assert.match(index, /data-left-panel-panel="model-edit"/);
+assert.match(index, /aria-label="model edit"/);
+assert.match(index, /id="model-transform-empty"/);
+assert.match(index, /id="model-transform-details"/);
+assert.match(index, /id="model-transform-name"/);
+assert.match(index, /id="model-transform-type"/);
+assert.match(index, /id="model-location-x"/);
+assert.match(index, /id="model-location-y"/);
+assert.match(index, /id="model-location-z"/);
+assert.match(index, /cm/);
+assert.match(index, /id="terrain-panel"/);
+assert.match(index, /data-left-panel-panel="terrain"/);
+assert.match(index, /aria-label="terrain"/);
+assert.match(index, /id="unreal5-panel"/);
+assert.match(index, /data-left-panel-panel="unreal5"/);
+assert.match(index, /aria-label="unreal 5"/);
+assert.match(index, /id="ue-rock-sync-status"/);
+assert.match(index, /id="ue-rock-sync-button"/);
+assert.match(index, /data-ue-rock-sync/);
+assert.match(index, /id="ue-rock-sync-source"/);
+assert.match(index, /\/ue-sync\/scene\.manifest\.json/);
+assert.match(index, /id="ue-semantic-mode-button"/);
+assert.match(index, /data-ue-semantic-mode/);
+assert.match(index, /id="ue-semantic-rules-source"/);
+assert.match(index, /\/ue-sync\/semantic\.rules\.json/);
+assert.match(index, /id="ue-rock-sync-count"/);
+assert.match(index, /id="scene-outliner-panel"/);
+assert.match(index, /data-left-panel-panel="scene-outliner"/);
+assert.match(index, /aria-label="scene outliner"/);
+assert.match(index, /id="scene-outliner-empty"/);
+assert.match(index, /id="scene-outliner-list"/);
+assert.match(index, /class="scene-outliner-list"/);
+assert.match(index, /hidden/);
 assert.match(index, /id="camera-fov-range"/);
 assert.match(index, /id="camera-fov-value"/);
 assert.match(index, /data-aspect-preset="16:9"/);
@@ -133,7 +200,34 @@ assert.doesNotMatch(
 );
 assert.match(index, /\.left-ui-panel,\s*[\s\S]*\.right-ui-panel\s*\{/);
 assert.match(index, /\.left-ui-panel\s*\{/);
+assert.match(index, /\.left-panel-content\s*\{[\s\S]*width:\s*calc\(100%\s*-\s*var\(--left-panel-rail-width\)\)[\s\S]*overflow:\s*auto/);
+assert.match(index, /\.left-tab-rail\s*\{[\s\S]*right:\s*0[\s\S]*width:\s*var\(--left-panel-rail-width\)[\s\S]*background:\s*rgba\(24,\s*24,\s*24,\s*0\.98\)/);
+assert.match(index, /\.left-tab-rail\s*\{[\s\S]*padding:\s*8px\s+0/);
+assert.match(index, /\.left-tab-rail\s+sl-tooltip\s*\{[\s\S]*display:\s*block[\s\S]*width:\s*100%/);
+assert.match(index, /\.left-tab-button::part\(base\),\s*[\s\S]*\.left-tab-button\s*\{/);
+const leftTabBaseRule = index.match(/\.left-tab-button::part\(base\)\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+const leftTabHoverRule = index.match(/\.left-tab-button::part\(base\):hover\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+const leftTabActiveRule = index.match(/\.left-tab-button\.is-active\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+assert.match(index, /\.left-tab-button::part\(base\),\s*[\s\S]*\.left-tab-button\s*\{[\s\S]*width:\s*100%[\s\S]*border-radius:\s*0/);
+assert.match(leftTabBaseRule, /border:\s*0/);
+assert.match(leftTabBaseRule, /background:\s*transparent/);
+assert.doesNotMatch(leftTabBaseRule, /transition:/);
+assert.doesNotMatch(leftTabHoverRule, /background:/);
+assert.match(leftTabActiveRule, /background:\s*var\(--editor-panel-bg\)/);
+assert.doesNotMatch(leftTabActiveRule, /border-color:/);
+assert.match(index, /\.settings-panel\s*\{[\s\S]*padding:\s*14px/);
+assert.match(index, /\.settings-panel\[hidden\]\s*\{[\s\S]*display:\s*none/);
+assert.match(index, /\.model-transform-details\[hidden\],\s*[\s\S]*\.model-transform-empty\[hidden\]\s*\{[\s\S]*display:\s*none/);
+assert.match(index, /\.model-coordinate-grid\s*\{[\s\S]*display:\s*grid/);
+assert.match(index, /\.ue-rock-sync-card\s*\{[\s\S]*border:\s*1px solid/);
+assert.match(index, /\.ue-rock-sync-button\s*\{[\s\S]*width:\s*100%/);
+assert.match(index, /\.ue-rock-sync-meta\s*\{[\s\S]*font-variant-numeric:\s*tabular-nums/);
+assert.match(index, /\.scene-outliner-list\s*\{[\s\S]*display:\s*flex/);
+assert.match(index, /\.scene-outliner-item\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
+assert.match(index, /\.scene-outliner-item\.is-selected\s*\{[\s\S]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.16\)/);
+assert.match(index, /\.scene-outliner-empty\[hidden\],\s*[\s\S]*\.scene-outliner-list\[hidden\]\s*\{[\s\S]*display:\s*none/);
 assert.match(index, /\.right-ui-panel/);
+assert.match(index, /\.right-ui-panel::before\s*\{[\s\S]*width:\s*var\(--right-panel-min-width\)[\s\S]*background:\s*rgba\(24,\s*24,\s*24,\s*0\.98\)/);
 assert.match(index, /id="right-panel-content"/);
 assert.match(index, /class="right-panel-content"/);
 assert.match(index, /\.camera-preview-list/);
@@ -143,13 +237,14 @@ assert.match(index, /id="right-panel-tertiary-column"/);
 assert.match(index, /id="right-panel-quaternary-column"/);
 assert.match(
   index,
-  /body\.is-right-panel-wide\s+\.right-panel-content\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*repeat\(4,\s*minmax\(var\(--right-panel-column-width\),\s*1fr\)\)/,
-  "Wide right panel should split into four columns without shrinking the default column width"
+  /\.right-panel-content\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*repeat\(4,\s*var\(--right-panel-column-width\)\)/,
+  "Resizable right panel should keep all columns at a fixed width"
 );
+assert.match(index, /padding-left:\s*var\(--right-panel-min-width\)/);
 assert.doesNotMatch(
   index,
-  /body\.is-right-panel-wide\s+\.camera-preview-list\s*\{[\s\S]*grid-template-columns/,
-  "Captured camera previews should stay in their own single-column container"
+  /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(var\(--right-panel-column-width\),\s*1fr\)\)/,
+  "Right panel columns should not scale with fractional tracks"
 );
 assert.match(index, /\.camera-preview-card/);
 assert.match(index, /--preview-aspect-ratio/);
@@ -188,6 +283,19 @@ assert.match(
   "Only cubes should use a half-cell placement offset"
 );
 
+const uiComponents = read("public/src/ui-components.js");
+assert.match(uiComponents, /customElements\.define\(\s*["']sl-icon["']/);
+assert.match(uiComponents, /customElements\.define\(\s*["']sl-icon-button["']/);
+assert.match(uiComponents, /customElements\.define\(\s*["']sl-tooltip["']/);
+assert.match(uiComponents, /part="base"/);
+assert.match(uiComponents, /unreal5/);
+assert.match(uiComponents, /font-size="9"/);
+assert.match(uiComponents, />UE<\/text>/);
+assert.match(uiComponents, /"list-tree"/);
+assert.doesNotMatch(uiComponents, /"chevron-double-left"/);
+assert.doesNotMatch(uiComponents, /"chevron-double-right"/);
+assert.match(uiComponents, /"play-fill"/);
+
 const playMode = read("public/src/play-mode.js");
 assert.match(playMode, /export\s+function\s+createPlayModeController/);
 assert.match(playMode, /function\s+enter/);
@@ -211,6 +319,19 @@ assert.match(editor, /createSelectionOutline/);
 assert.match(editor, /createCameraController/);
 assert.match(editor, /import\s+\{\s*createPlayModeController\s*\}\s+from\s+["']\.\/play-mode\.js["']/);
 assert.match(editor, /const\s+TRANSFORM_MODE_KEYS\s*=\s*\{/);
+assert.match(editor, /import\s+\{\s*GLTFLoader\s*\}\s+from\s+["']three\/addons\/loaders\/GLTFLoader\.js["']/);
+assert.doesNotMatch(
+  editor,
+  /import\s+\{\s*SimplifyModifier\s*\}/,
+  "Editor import should not run expensive browser-side mesh simplification by default"
+);
+assert.doesNotMatch(
+  editor,
+  /import\s+\{\s*mergeVertices\s*\}/,
+  "Editor import should not weld geometry on the main thread by default"
+);
+assert.doesNotMatch(editor, /new\s+SimplifyModifier\(\)/);
+assert.match(editor, /import\s+\{\s*createUnrealRockSyncController\s*\}\s+from\s+["']\.\/ue-rock-sync\.js["']/);
 assert.match(editor, /const\s+DEFAULT_CAMERA_SETTINGS\s*=\s*\{/);
 assert.doesNotMatch(
   editor,
@@ -220,8 +341,23 @@ assert.doesNotMatch(
 assert.doesNotMatch(editor, /from\s+["']\.\/shortcuts\.js["']/);
 assert.match(editor, /const\s+runButton\s*=\s*document\.querySelector\(\s*["']\[data-system-tool="run"\]["']\s*\)/);
 assert.match(editor, /const\s+roadButton\s*=\s*document\.querySelector\(\s*["']\[data-system-tool="road"\]["']\s*\)/);
-assert.match(editor, /const\s+rightPanelToggleButton\s*=\s*document\.querySelector\(\s*["']#right-panel-toggle["']\s*\)/);
-assert.match(editor, /const\s+rightPanelWideToggleButton\s*=\s*document\.querySelector\(\s*["']#right-panel-wide-toggle["']\s*\)/);
+assert.doesNotMatch(editor, /rightPanelToggleButton/);
+assert.doesNotMatch(editor, /rightPanelWideToggleButton/);
+assert.match(editor, /const\s+leftPanelTabs\s*=\s*Array\.from\(document\.querySelectorAll\(\s*["']\[data-left-panel-tab\]["']\s*\)\)/);
+assert.match(editor, /const\s+leftPanelPanels\s*=\s*Array\.from\(document\.querySelectorAll\(\s*["']\[data-left-panel-panel\]["']\s*\)\)/);
+assert.match(editor, /const\s+modelTransformEmpty\s*=\s*document\.querySelector\(\s*["']#model-transform-empty["']\s*\)/);
+assert.match(editor, /const\s+modelTransformDetails\s*=\s*document\.querySelector\(\s*["']#model-transform-details["']\s*\)/);
+assert.match(editor, /const\s+modelLocationX\s*=\s*document\.querySelector\(\s*["']#model-location-x["']\s*\)/);
+assert.match(editor, /const\s+modelLocationY\s*=\s*document\.querySelector\(\s*["']#model-location-y["']\s*\)/);
+assert.match(editor, /const\s+modelLocationZ\s*=\s*document\.querySelector\(\s*["']#model-location-z["']\s*\)/);
+assert.match(editor, /const\s+sceneOutlinerEmpty\s*=\s*document\.querySelector\(\s*["']#scene-outliner-empty["']\s*\)/);
+assert.match(editor, /const\s+sceneOutlinerList\s*=\s*document\.querySelector\(\s*["']#scene-outliner-list["']\s*\)/);
+assert.match(editor, /const\s+ueRockSyncButton\s*=\s*document\.querySelector\(\s*["']#ue-rock-sync-button["']\s*\)/);
+assert.match(editor, /const\s+ueRockSyncStatus\s*=\s*document\.querySelector\(\s*["']#ue-rock-sync-status["']\s*\)/);
+assert.match(editor, /const\s+ueRockSyncCount\s*=\s*document\.querySelector\(\s*["']#ue-rock-sync-count["']\s*\)/);
+assert.match(editor, /const\s+ueSemanticModeButton\s*=\s*document\.querySelector\(\s*["']#ue-semantic-mode-button["']\s*\)/);
+assert.match(editor, /const\s+rightPanel\s*=\s*document\.querySelector\(\s*["']#right-ui-panel["']\s*\)/);
+assert.match(editor, /const\s+rightPanelResizeHandle\s*=\s*document\.querySelector\(\s*["']#right-panel-resize-handle["']\s*\)/);
 assert.match(editor, /const\s+cameraSpeedInput\s*=\s*document\.querySelector\(\s*["']#camera-speed-input["']\s*\)/);
 assert.match(editor, /const\s+cameraSettings\s*=\s*\{\s*\.\.\.DEFAULT_CAMERA_SETTINGS\s*\}/);
 assert.match(editor, /function\s+getRuntimeAspect/);
@@ -241,9 +377,78 @@ assert.match(editor, /function\s+setCameraFov/);
 assert.match(editor, /function\s+setRuntimeAspect/);
 assert.match(editor, /function\s+updateCameraSpeedControl/);
 assert.match(editor, /function\s+setCameraMoveSpeed/);
-assert.match(editor, /function\s+setRightPanelCollapsed\(collapsed\)/);
-assert.match(editor, /let\s+rightPanelWide\s*=\s*false/);
-assert.match(editor, /function\s+setRightPanelWide\(wide\)/);
+assert.match(editor, /const\s+unrealCentimetersPerSceneUnit\s*=\s*100/);
+assert.match(editor, /function\s+formatUnrealCentimeters\(value\)/);
+assert.match(editor, /value\s*\*\s*unrealCentimetersPerSceneUnit/);
+assert.match(editor, /return\s+`\$\{formatted\}\s+cm`/);
+assert.match(editor, /function\s+updateModelTransformPanel\(\)/);
+assert.match(editor, /modelTransformEmpty\.hidden\s*=\s*hasSelection/);
+assert.match(editor, /modelTransformDetails\.hidden\s*=\s*!hasSelection/);
+assert.match(editor, /modelLocationX\.textContent\s*=\s*formatUnrealCentimeters\(selectedAsset\.position\.x\)/);
+assert.match(editor, /modelLocationY\.textContent\s*=\s*formatUnrealCentimeters\(selectedAsset\.position\.y\)/);
+assert.match(editor, /modelLocationZ\.textContent\s*=\s*formatUnrealCentimeters\(selectedAsset\.position\.z\)/);
+assert.match(editor, /function\s+setLeftPanelTab\(tabName\)/);
+assert.match(editor, /tab\.setAttribute\(\s*["']aria-selected["'],\s*`\$\{active\}`\s*\)/);
+assert.match(editor, /panel\.hidden\s*=\s*panel\.dataset\.leftPanelPanel\s*!==\s*tabName/);
+assert.match(editor, /function\s+getSceneOutlinerItems\(\)/);
+assert.match(editor, /placedAssets\.map\(\(asset\)\s*=>/);
+assert.match(editor, /Array\.from\(roadTiles\.values\(\)\)\.map/);
+assert.match(editor, /ueRockSync\.group\.children\.map/);
+assert.match(editor, /capturedCameraPreviews\.map/);
+assert.match(editor, /function\s+renderSceneOutliner\(\)/);
+assert.match(editor, /sceneOutlinerList\.replaceChildren\(/);
+assert.match(editor, /let\s+sceneOutlinerDirty\s*=\s*true/);
+assert.match(editor, /function\s+markSceneOutlinerDirty\(\)/);
+assert.match(editor, /function\s+flushSceneOutliner\(\)/);
+assert.match(editor, /if\s*\(!sceneOutlinerDirty\)\s*\{\s*return;\s*\}/);
+assert.match(editor, /button\.dataset\.sceneOutlinerItemId\s*=/);
+assert.match(editor, /button\.classList\.toggle\(\s*["']is-selected["'],\s*item\.object\s*===\s*selectedAsset/);
+assert.match(editor, /function\s+selectSceneOutlinerItem\(itemId\)/);
+assert.match(editor, /function\s+getSelectableSceneObjects\(\)/);
+assert.match(editor, /return\s+\[\.\.\.placedAssets,\s*\.\.\.ueRockSync\.group\.children\]/);
+assert.match(editor, /raycaster\.intersectObjects\(getSelectableSceneObjects\(\),\s*true\)/);
+assert.match(editor, /const\s+ueRockSync\s*=\s*createUnrealRockSyncController\(/);
+assert.match(editor, /manifestUrl:\s*["']\/ue-sync\/scene\.manifest\.json["']/);
+assert.match(editor, /fallbackManifestUrl:\s*["']\/ue-sync\/rocks\.instances\.json["']/);
+assert.match(editor, /semanticRulesUrl:\s*["']\/ue-sync\/semantic\.rules\.json["']/);
+assert.match(editor, /loader:\s*new\s+GLTFLoader\(\)/);
+assert.match(editor, /simplifyModifier:\s*null/);
+assert.match(editor, /mergeVertices:\s*null/);
+assert.match(editor, /reductionRatio:\s*0/);
+assert.match(editor, /onStatusChange:\s*updateUnrealRockSyncStatus/);
+assert.match(editor, /onSynced:\s*\(manifest\)\s*=>\s*\{[\s\S]*adaptImportedSceneToManifest\(manifest\)[\s\S]*markSceneOutlinerDirty\(\)/);
+assert.match(editor, /function\s+setImportedSceneDisplayMode\(mode\)/);
+assert.match(editor, /ueRockSync\.setDisplayMode\(mode\)/);
+assert.match(editor, /function\s+adaptImportedSceneToManifest\(manifest\)/);
+assert.match(editor, /gridMaterial\.uniforms\.fadeDistance\.value/);
+assert.match(editor, /camera\.far\s*=\s*Math\.max\(camera\.far,\s*nextGridSize\s*\*\s*2\)/);
+assert.match(editor, /function\s+updateUnrealRockSyncStatus\(status\)/);
+assert.match(editor, /ueRockSyncButton\?\.addEventListener\(\s*["']click["']/);
+assert.match(editor, /ueSemanticModeButton\?\.addEventListener\(\s*["']click["']/);
+assert.match(editor, /const\s+rightPanelMinWidth\s*=\s*52/);
+assert.match(editor, /const\s+rightPanelDefaultWidth\s*=\s*280/);
+assert.match(editor, /const\s+rightPanelColumnWidth\s*=\s*228/);
+assert.match(editor, /const\s+rightPanelMaxColumns\s*=\s*4/);
+assert.match(editor, /let\s+rightPanelWidth\s*=/);
+assert.match(editor, /let\s+rightPanelResizeState\s*=\s*null/);
+assert.match(editor, /function\s+getRightPanelMaxWidth/);
+assert.match(editor, /function\s+getRightPanelWidthSteps/);
+assert.match(editor, /function\s+snapRightPanelWidth/);
+assert.match(editor, /function\s+getRightPanelStepIndex/);
+assert.match(editor, /function\s+setRightPanelStep\(index\)/);
+assert.match(editor, /rightPanelMinWidth\s*\+\s*rightPanelColumnWidth\s*\*\s*columnCount/);
+assert.match(editor, /function\s+setRightPanelWidth\(value/);
+assert.match(editor, /const\s+nextWidth\s*=\s*snapRightPanelWidth\(value\)/);
+assert.match(editor, /style\.setProperty\(\s*["']--right-panel-width["'],\s*`\$\{nextWidth\}px`/);
+assert.match(editor, /classList\.toggle\(\s*["']is-right-panel-minimized["']/);
+assert.match(editor, /function\s+beginRightPanelResize\(event\)/);
+assert.match(editor, /function\s+updateRightPanelResize\(event\)/);
+assert.match(editor, /function\s+endRightPanelResize\(event\)/);
+assert.match(editor, /function\s+handleRightPanelResizeKey\(event\)/);
+assert.doesNotMatch(editor, /rightPanelCollapsed/);
+assert.doesNotMatch(editor, /rightPanelWide/);
+assert.doesNotMatch(editor, /setRightPanelCollapsed/);
+assert.doesNotMatch(editor, /setRightPanelWide/);
 assert.match(editor, /const\s+roadTiles\s*=\s*new\s+Map\(\)/);
 assert.match(editor, /let\s+roadDrawingMode\s*=\s*false/);
 assert.match(editor, /let\s+roadDrawing\s*=\s*false/);
@@ -292,19 +497,6 @@ assert.match(
 assert.match(editor, /function\s+beginRoadDrawing\(event\)/);
 assert.match(editor, /function\s+continueRoadDrawing\(event\)/);
 assert.match(editor, /function\s+endRoadDrawing\(\)/);
-assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-right-panel-collapsed["'],\s*rightPanelCollapsed\s*\)/);
-assert.match(editor, /rightPanelToggleButton\?\.setAttribute\(\s*["']aria-expanded["'],\s*`\$\{!rightPanelCollapsed\}`\s*\)/);
-assert.match(editor, /rightPanelToggleButton\.name\s*=\s*rightPanelCollapsed\s*\?\s*["']chevron-left["']\s*:\s*["']chevron-right["']/);
-assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-right-panel-wide["'],\s*rightPanelWide\s*\)/);
-assert.match(editor, /rightPanelWideToggleButton\?\.setAttribute\(\s*["']aria-pressed["'],\s*`\$\{rightPanelWide\}`\s*\)/);
-assert.match(editor, /const\s+nextLabel\s*=\s*rightPanelWide\s*\?\s*["']统一收起["']\s*:\s*["']统一展开["']/);
-assert.match(editor, /const\s+nextIcon\s*=\s*rightPanelWide\s*\?\s*["']chevron-double-right["']\s*:\s*["']chevron-double-left["']/);
-assert.match(editor, /rightPanelWideToggleButton\.name\s*=\s*nextIcon/);
-assert.match(editor, /rightPanelWideToggleButton\.label\s*=\s*nextLabel/);
-assert.match(editor, /rightPanelWideToggleButton\.setAttribute\(\s*["']name["'],\s*nextIcon\s*\)/);
-assert.match(editor, /rightPanelWideToggleButton\.setAttribute\(\s*["']label["'],\s*nextLabel\s*\)/);
-assert.match(editor, /rightPanelWideToggleButton\.closest\(\s*["']sl-tooltip["']\s*\)\?\.setAttribute\(\s*["']content["'],\s*nextLabel\s*\)/);
-assert.match(editor, /requestAnimationFrame\(resize\)/);
 assert.match(editor, /fovRange\?\.addEventListener\(\s*["']input["']/);
 assert.doesNotMatch(
   editor,
@@ -344,8 +536,14 @@ assert.match(editor, /onMoveSpeedChange:\s*updateCameraSpeedControl/);
 assert.match(editor, /cameraSpeedInput\?\.addEventListener\(\s*["']input["'],\s*\(\)\s*=>\s*\{/);
 assert.match(editor, /cameraSpeedInput\?\.addEventListener\(\s*["']change["'],\s*\(\)\s*=>\s*\{/);
 assert.match(editor, /setCameraMoveSpeed\(cameraSpeedInput\.value\)/);
-assert.match(editor, /rightPanelToggleButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{/);
-assert.match(editor, /rightPanelWideToggleButton\?\.addEventListener\(\s*["']click["'],\s*\(\)\s*=>\s*\{/);
+assert.match(editor, /leftPanelTabs\.forEach\(\(tab\)\s*=>\s*\{/);
+assert.match(editor, /setLeftPanelTab\(tab\.dataset\.leftPanelTab\)/);
+assert.match(editor, /rightPanelResizeHandle\?\.addEventListener\(\s*["']pointerdown["'],\s*beginRightPanelResize\s*\)/);
+assert.match(editor, /rightPanelResizeHandle\?\.addEventListener\(\s*["']keydown["'],\s*handleRightPanelResizeKey\s*\)/);
+assert.match(editor, /rightPanelResizeHandle\?\.addEventListener\(\s*["']dblclick["']/);
+assert.match(editor, /window\.addEventListener\(\s*["']pointermove["'],\s*updateRightPanelResize\s*\)/);
+assert.match(editor, /window\.addEventListener\(\s*["']pointerup["'],\s*endRightPanelResize\s*\)/);
+assert.match(editor, /window\.addEventListener\(\s*["']pointercancel["'],\s*endRightPanelResize\s*\)/);
 assert.match(editor, /function\s+togglePlayMode/);
 assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-playing["'],\s*playing\s*\)/);
 assert.match(editor, /document\.body\.classList\.toggle\(\s*["']is-playing["'],\s*playing\s*\)[\s\S]*updateSelectionFeedback\(\);[\s\S]*render\(\);[\s\S]*if\s*\(playing\)/);
@@ -427,8 +625,8 @@ assert.match(
 );
 assert.match(
   editor,
-  /function\s+render\(\)\s*\{[\s\S]*renderSceneToActiveViewport\(\);[\s\S]*selectionOutline\.render\(selectedAsset,\s*selectionOutlineVisible\);[\s\S]*renderCapturedCameraPreviews\(\);[\s\S]*\}/,
-  "The main render pass should refresh captured camera previews"
+  /function\s+render\(\)\s*\{[\s\S]*updateModelTransformPanel\(\);[\s\S]*flushSceneOutliner\(\);[\s\S]*renderSceneToActiveViewport\(\);[\s\S]*selectionOutline\.render\(selectedAsset,\s*selectionOutlineVisible\);[\s\S]*renderCapturedCameraPreviews\(\);[\s\S]*\}/,
+  "The main render pass should only flush the scene outliner when dirty"
 );
 assert.match(editor, /function\s+getViewportBounds/);
 assert.match(editor, /document\.querySelector\(\s*["']#left-ui-panel["']\s*\)/);
@@ -445,11 +643,25 @@ assert.match(
 assert.match(editor, /cursorPosition:\s*\{\s*value:\s*new\s+THREE\.Vector2/);
 assert.match(editor, /cellGridSize:\s*\{\s*value:\s*gridSnapSize/);
 assert.match(editor, /sectionGridSize:\s*\{\s*value:\s*gridSnapSize\s*\*\s*2/);
+assert.match(editor, /const\s+gridOriginLineWidth\s*=\s*0\.04/);
+assert.match(editor, /const\s+gridOriginLineElevation\s*=\s*0\.004/);
 assert.match(editor, /const\s+scaleSnapSize\s*=\s*1/);
 assert.match(editor, /const\s+shadowReceiver\s*=\s*new\s+THREE\.Mesh\(/);
 assert.match(editor, /new\s+THREE\.ShadowMaterial\(/);
 assert.match(editor, /shadowReceiver\.receiveShadow\s*=\s*true/);
 assert.match(editor, /shadowReceiver\.userData\.pickable\s*=\s*false/);
+assert.match(editor, /const\s+gridOriginMaterial\s*=\s*new\s+THREE\.MeshBasicMaterial/);
+assert.match(editor, /color:\s*0x5f6872/);
+assert.match(editor, /opacity:\s*0\.45/);
+assert.match(editor, /const\s+gridOriginXLine\s*=\s*new\s+THREE\.Mesh\(\s*new\s+THREE\.PlaneGeometry\(gridSize,\s*gridOriginLineWidth\)/);
+assert.match(editor, /const\s+gridOriginYLine\s*=\s*new\s+THREE\.Mesh\(\s*new\s+THREE\.PlaneGeometry\(gridOriginLineWidth,\s*gridSize\)/);
+assert.match(editor, /gridOriginXLine\.name\s*=\s*["']grid-origin-x-line["']/);
+assert.match(editor, /gridOriginYLine\.name\s*=\s*["']grid-origin-y-line["']/);
+assert.match(editor, /gridOriginXLine\.position\.z\s*=\s*gridOriginLineElevation/);
+assert.match(editor, /gridOriginYLine\.position\.z\s*=\s*gridOriginLineElevation/);
+assert.match(editor, /gridOriginXLine\.userData\.pickable\s*=\s*false/);
+assert.match(editor, /gridOriginYLine\.userData\.pickable\s*=\s*false/);
+assert.match(editor, /scene\.add\(gridOriginXLine,\s*gridOriginYLine\)/);
 assert.match(editor, /transformControls\.setScaleSnap\(scaleSnapSize\)/);
 assert.match(editor, /function\s+configureAssetShadows\(asset\)/);
 assert.match(editor, /child\.castShadow\s*=\s*true/);

@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { createAsset, getAssetGridOffset } from "./assets.js";
 import { createCameraController } from "./camera-controls.js";
 import { createPlayModeController } from "./play-mode.js";
 import { createSelectionOutline } from "./selection-outline.js";
+import { createUnrealRockSyncController } from "./ue-rock-sync.js";
 
 const TRANSFORM_MODE_KEYS = {
   keyw: "translate",
@@ -20,6 +22,11 @@ const DEFAULT_CAMERA_SETTINGS = {
 
 const minCameraFov = 20;
 const maxCameraFov = 100;
+const unrealCentimetersPerSceneUnit = 100;
+const rightPanelMinWidth = 52;
+const rightPanelDefaultWidth = 280;
+const rightPanelColumnWidth = 228;
+const rightPanelMaxColumns = 4;
 
 export function createEditor() {
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -60,8 +67,10 @@ export function createEditor() {
 
   const gridSize = 500;
   const gridSnapSize = 1;
+  const gridOriginLineWidth = 0.04;
+  const gridOriginLineElevation = 0.004;
   const scaleSnapSize = 1;
-  const gridHalfSize = gridSize / 2;
+  let activeGridHalfSize = gridSize / 2;
   const gridMaterial = new THREE.ShaderMaterial({
     extensions: {
       derivatives: true
@@ -157,13 +166,53 @@ export function createEditor() {
   const grid = new THREE.Mesh(gridGeometry, gridMaterial);
   scene.add(grid);
 
+  const gridOriginMaterial = new THREE.MeshBasicMaterial({
+    color: 0x5f6872,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    depthTest: true
+  });
+  const gridOriginXLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(gridSize, gridOriginLineWidth),
+    gridOriginMaterial
+  );
+  const gridOriginYLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(gridOriginLineWidth, gridSize),
+    gridOriginMaterial
+  );
+  gridOriginXLine.name = "grid-origin-x-line";
+  gridOriginYLine.name = "grid-origin-y-line";
+  gridOriginXLine.position.z = gridOriginLineElevation;
+  gridOriginYLine.position.z = gridOriginLineElevation;
+  gridOriginXLine.renderOrder = 1;
+  gridOriginYLine.renderOrder = 1;
+  gridOriginXLine.userData.pickable = false;
+  gridOriginYLine.userData.pickable = false;
+  scene.add(gridOriginXLine, gridOriginYLine);
+
   const assetToolbar = document.querySelector("#asset-toolbar");
   const transformToolbar = document.querySelector("#transform-toolbar");
   const transformButtons = Array.from(document.querySelectorAll("[data-transform-mode]"));
   const runButton = document.querySelector('[data-system-tool="run"]');
   const roadButton = document.querySelector('[data-system-tool="road"]');
-  const rightPanelToggleButton = document.querySelector("#right-panel-toggle");
-  const rightPanelWideToggleButton = document.querySelector("#right-panel-wide-toggle");
+  const rightPanel = document.querySelector("#right-ui-panel");
+  const rightPanelResizeHandle = document.querySelector("#right-panel-resize-handle");
+  const leftPanelTabs = Array.from(document.querySelectorAll("[data-left-panel-tab]"));
+  const leftPanelPanels = Array.from(document.querySelectorAll("[data-left-panel-panel]"));
+  const modelTransformEmpty = document.querySelector("#model-transform-empty");
+  const modelTransformDetails = document.querySelector("#model-transform-details");
+  const modelTransformName = document.querySelector("#model-transform-name");
+  const modelTransformType = document.querySelector("#model-transform-type");
+  const modelLocationX = document.querySelector("#model-location-x");
+  const modelLocationY = document.querySelector("#model-location-y");
+  const modelLocationZ = document.querySelector("#model-location-z");
+  const sceneOutlinerEmpty = document.querySelector("#scene-outliner-empty");
+  const sceneOutlinerList = document.querySelector("#scene-outliner-list");
+  const ueRockSyncButton = document.querySelector("#ue-rock-sync-button");
+  const ueRockSyncStatus = document.querySelector("#ue-rock-sync-status");
+  const ueRockSyncCount = document.querySelector("#ue-rock-sync-count");
+  const ueSemanticModeButton = document.querySelector("#ue-semantic-mode-button");
   const playViewportFrame = document.querySelector("#play-viewport-frame");
   const fovRange = document.querySelector("#camera-fov-range");
   const fovValue = document.querySelector("#camera-fov-value");
@@ -197,8 +246,10 @@ export function createEditor() {
   let activeTransformMode = "translate";
   let transformGizmoVisible = true;
   let selectionOutlineVisible = true;
-  let rightPanelCollapsed = false;
-  let rightPanelWide = false;
+  let rightPanelWidth = rightPanel?.getBoundingClientRect().width ?? rightPanelDefaultWidth;
+  let rightPanelResizeState = null;
+  let rightPanelResizeFrame = 0;
+  let sceneOutlinerDirty = true;
   let roadDrawingMode = false;
   let roadDrawing = false;
   let roadDrawingTiles = [];
@@ -447,37 +498,386 @@ export function createEditor() {
     updateCameraSpeedControl(speed);
   }
 
-  function setRightPanelCollapsed(collapsed) {
-    rightPanelCollapsed = Boolean(collapsed);
-    document.body.classList.toggle("is-right-panel-collapsed", rightPanelCollapsed);
-    rightPanelToggleButton?.setAttribute("aria-expanded", `${!rightPanelCollapsed}`);
+  function formatUnrealCentimeters(value) {
+    const centimeters = value * unrealCentimetersPerSceneUnit;
+    const rounded = Math.abs(centimeters) < 0.005
+      ? 0
+      : Math.round(centimeters * 100) / 100;
+    const formatted = Number.isInteger(rounded)
+      ? `${rounded}`
+      : `${rounded}`.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 
-    if (rightPanelToggleButton) {
-      rightPanelToggleButton.name = rightPanelCollapsed ? "chevron-left" : "chevron-right";
-      rightPanelToggleButton.label = rightPanelCollapsed ? "Expand right panel" : "Collapse right panel";
-    }
-
-    requestAnimationFrame(resize);
+    return `${formatted} cm`;
   }
 
-  function setRightPanelWide(wide) {
-    rightPanelWide = Boolean(wide);
-    document.body.classList.toggle("is-right-panel-wide", rightPanelWide);
-    rightPanelWideToggleButton?.setAttribute("aria-pressed", `${rightPanelWide}`);
-
-    if (rightPanelWideToggleButton) {
-      const nextLabel = rightPanelWide ? "统一收起" : "统一展开";
-      const nextIcon = rightPanelWide ? "chevron-double-right" : "chevron-double-left";
-
-      rightPanelWideToggleButton.classList.toggle("is-active", rightPanelWide);
-      rightPanelWideToggleButton.name = nextIcon;
-      rightPanelWideToggleButton.label = nextLabel;
-      rightPanelWideToggleButton.setAttribute("name", nextIcon);
-      rightPanelWideToggleButton.setAttribute("label", nextLabel);
-      rightPanelWideToggleButton.closest("sl-tooltip")?.setAttribute("content", nextLabel);
+  function updateModelTransformPanel() {
+    if (
+      !modelTransformEmpty ||
+      !modelTransformDetails ||
+      !modelTransformName ||
+      !modelTransformType ||
+      !modelLocationX ||
+      !modelLocationY ||
+      !modelLocationZ
+    ) {
+      return;
     }
 
-    requestAnimationFrame(resize);
+    const hasSelection = Boolean(selectedAsset);
+
+    modelTransformEmpty.hidden = hasSelection;
+    modelTransformDetails.hidden = !hasSelection;
+
+    if (!selectedAsset) {
+      return;
+    }
+
+    modelTransformName.textContent = selectedAsset.name || "Selected model";
+    modelTransformType.textContent = `${selectedAsset.userData.assetType || "model"} · Unreal Units (cm)`;
+    modelLocationX.textContent = formatUnrealCentimeters(selectedAsset.position.x);
+    modelLocationY.textContent = formatUnrealCentimeters(selectedAsset.position.y);
+    modelLocationZ.textContent = formatUnrealCentimeters(selectedAsset.position.z);
+  }
+
+  function setLeftPanelTab(tabName) {
+    if (!tabName) {
+      return;
+    }
+
+    leftPanelTabs.forEach((tab) => {
+      const active = tab.dataset.leftPanelTab === tabName;
+
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", `${active}`);
+    });
+
+    leftPanelPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.leftPanelPanel !== tabName;
+    });
+  }
+
+  function sceneOutlinerTypeLabel(type) {
+    const labels = {
+      "sun-light": "Light",
+      "ue-scene-actor": "UE Actor",
+      "ue-rock": "UE Rock",
+      camera: "Camera",
+      character: "Character",
+      cube: "Cube",
+      road: "Road",
+      sphere: "Sphere"
+    };
+
+    return labels[type] || "Object";
+  }
+
+  function makeSceneOutlinerItem(object, type, fallbackName) {
+    return {
+      id: object.uuid,
+      name: object.name || fallbackName,
+      object,
+      type,
+      typeLabel: sceneOutlinerTypeLabel(type)
+    };
+  }
+
+  function getSceneOutlinerItems() {
+    const assetItems = placedAssets.map((asset) => makeSceneOutlinerItem(
+      asset,
+      asset.userData.assetType || "object",
+      asset.name || "Asset"
+    ));
+    const roadItems = Array.from(roadTiles.values()).map((mesh, index) => makeSceneOutlinerItem(
+      mesh,
+      "road",
+      `Road ${index + 1}`
+    ));
+    const ueRockItems = ueRockSync.group.children.map((object, index) => makeSceneOutlinerItem(
+      object,
+      object.userData.assetType || "ue-scene-actor",
+      object.userData.label || object.name || `UE Actor ${index + 1}`
+    ));
+    const cameraItems = capturedCameraPreviews.map((preview, index) => makeSceneOutlinerItem(
+      preview.camera,
+      "camera",
+      preview.camera.name || `Camera ${index + 1}`
+    ));
+
+    return [...assetItems, ...ueRockItems, ...roadItems, ...cameraItems];
+  }
+
+  function renderSceneOutliner() {
+    if (!sceneOutlinerEmpty || !sceneOutlinerList) {
+      sceneOutlinerDirty = false;
+      return;
+    }
+
+    const items = getSceneOutlinerItems();
+
+    sceneOutlinerEmpty.hidden = items.length > 0;
+    sceneOutlinerList.hidden = items.length === 0;
+    sceneOutlinerList.replaceChildren(
+      ...items.map((item) => {
+        const button = document.createElement("button");
+        const name = document.createElement("span");
+        const type = document.createElement("span");
+
+        button.type = "button";
+        button.className = "scene-outliner-item";
+        button.dataset.sceneOutlinerItemId = item.id;
+        button.classList.toggle("is-selected", item.object === selectedAsset);
+        name.className = "scene-outliner-name";
+        name.textContent = item.name;
+        type.className = "scene-outliner-type";
+        type.textContent = item.typeLabel;
+        button.append(name, type);
+        return button;
+      })
+    );
+    sceneOutlinerDirty = false;
+  }
+
+  function markSceneOutlinerDirty() {
+    sceneOutlinerDirty = true;
+  }
+
+  function flushSceneOutliner() {
+    if (!sceneOutlinerDirty) {
+      return;
+    }
+
+    renderSceneOutliner();
+  }
+
+  function selectSceneOutlinerItem(itemId) {
+    const item = getSceneOutlinerItems().find((candidate) => candidate.id === itemId);
+
+    if (!item) {
+      return false;
+    }
+
+    selectAsset(item.object);
+    return true;
+  }
+
+  function getSelectableSceneObjects() {
+    return [...placedAssets, ...ueRockSync.group.children];
+  }
+
+  function updateUnrealRockSyncStatus(status) {
+    if (ueRockSyncStatus) {
+      ueRockSyncStatus.textContent = status.message;
+    }
+
+    if (ueRockSyncCount) {
+      ueRockSyncCount.textContent = `${status.count ?? 0}`;
+    }
+
+    if (ueRockSyncButton) {
+      ueRockSyncButton.disabled = status.state === "syncing";
+    }
+  }
+
+  function setImportedSceneDisplayMode(mode) {
+    ueRockSync.setDisplayMode(mode);
+
+    if (ueSemanticModeButton) {
+      const semanticMode = ueRockSync.getDisplayMode() === "semanticColor";
+
+      ueSemanticModeButton.classList.toggle("is-active", semanticMode);
+      ueSemanticModeButton.textContent = semanticMode ? "Gray Mode" : "ID Color Mode";
+    }
+
+    render();
+  }
+
+  function adaptImportedSceneToManifest(manifest) {
+    const nextGridSize = Number(manifest?.gridSizeMeters);
+
+    if (!Number.isFinite(nextGridSize) || nextGridSize <= gridSize) {
+      return;
+    }
+
+    const gridScale = nextGridSize / gridSize;
+
+    activeGridHalfSize = nextGridSize / 2;
+    grid.scale.set(gridScale, gridScale, 1);
+    shadowReceiver.scale.set(gridScale, gridScale, 1);
+    gridOriginXLine.scale.set(gridScale, 1, 1);
+    gridOriginYLine.scale.set(1, gridScale, 1);
+    gridMaterial.uniforms.fadeDistance.value = nextGridSize / 2;
+    camera.far = Math.max(camera.far, nextGridSize * 2);
+    camera.updateProjectionMatrix();
+  }
+
+  const ueRockSync = createUnrealRockSyncController({
+    THREE,
+    scene,
+    loader: new GLTFLoader(),
+    simplifyModifier: null,
+    mergeVertices: null,
+    reductionRatio: 0,
+    manifestUrl: "/ue-sync/scene.manifest.json",
+    fallbackManifestUrl: "/ue-sync/rocks.instances.json",
+    semanticRulesUrl: "/ue-sync/semantic.rules.json",
+    onStatusChange: updateUnrealRockSyncStatus,
+    onSynced: (manifest) => {
+      adaptImportedSceneToManifest(manifest);
+
+      if (
+        (selectedAsset?.userData.assetType === "ue-rock" || selectedAsset?.userData.assetType === "ue-scene-actor") &&
+        !selectedAsset.parent
+      ) {
+        selectAsset(null);
+      }
+
+      markSceneOutlinerDirty();
+    },
+    render
+  });
+
+  function getRightPanelMaxWidth() {
+    const leftPanel = document.querySelector("#left-ui-panel");
+    const leftPanelWidth = leftPanel?.getBoundingClientRect().width ?? 0;
+
+    return Math.min(
+      rightPanelMinWidth + rightPanelColumnWidth * rightPanelMaxColumns,
+      Math.max(rightPanelMinWidth, window.innerWidth - leftPanelWidth + rightPanelMinWidth)
+    );
+  }
+
+  function getRightPanelWidthSteps() {
+    const maxWidth = getRightPanelMaxWidth();
+    const steps = [rightPanelMinWidth];
+
+    for (let columnCount = 1; columnCount <= rightPanelMaxColumns; columnCount += 1) {
+      const step = rightPanelMinWidth + rightPanelColumnWidth * columnCount;
+
+      if (step <= maxWidth + 0.5) {
+        steps.push(step);
+      }
+    }
+
+    return steps;
+  }
+
+  function snapRightPanelWidth(value) {
+    const steps = getRightPanelWidthSteps();
+    const target = clampNumber(Number(value), steps[0], steps.at(-1));
+
+    return steps.reduce((closest, step) => (
+      Math.abs(step - target) < Math.abs(closest - target) ? step : closest
+    ), steps[0]);
+  }
+
+  function getRightPanelStepIndex() {
+    const steps = getRightPanelWidthSteps();
+    const currentWidth = snapRightPanelWidth(rightPanelWidth);
+
+    return Math.max(0, steps.indexOf(currentWidth));
+  }
+
+  function setRightPanelStep(index) {
+    const steps = getRightPanelWidthSteps();
+    const nextIndex = Math.round(clampNumber(index, 0, steps.length - 1));
+
+    setRightPanelWidth(steps[nextIndex]);
+  }
+
+  function requestEditorResize() {
+    if (rightPanelResizeFrame) {
+      return;
+    }
+
+    rightPanelResizeFrame = requestAnimationFrame(() => {
+      rightPanelResizeFrame = 0;
+      resize();
+    });
+  }
+
+  function setRightPanelWidth(value, { scheduleResize = true } = {}) {
+    const maxWidth = getRightPanelMaxWidth();
+    const nextWidth = snapRightPanelWidth(value);
+
+    rightPanelWidth = nextWidth;
+    document.documentElement.style.setProperty("--right-panel-width", `${nextWidth}px`);
+    document.body.classList.toggle("is-right-panel-minimized", nextWidth <= rightPanelMinWidth + 8);
+
+    if (rightPanelResizeHandle) {
+      rightPanelResizeHandle.setAttribute("aria-valuemax", `${Math.round(maxWidth)}`);
+      rightPanelResizeHandle.setAttribute("aria-valuenow", `${nextWidth}`);
+    }
+
+    if (scheduleResize) {
+      requestEditorResize();
+    }
+  }
+
+  function beginRightPanelResize(event) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    rightPanelResizeState = {
+      pointerId: event.pointerId
+    };
+    document.body.classList.add("is-resizing-right-panel");
+
+    try {
+      rightPanelResizeHandle.setPointerCapture(event.pointerId);
+    } catch {
+    }
+  }
+
+  function updateRightPanelResize(event) {
+    if (!rightPanelResizeState || event.pointerId !== rightPanelResizeState.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    setRightPanelWidth(window.innerWidth - event.clientX);
+  }
+
+  function endRightPanelResize(event) {
+    if (!rightPanelResizeState || event.pointerId !== rightPanelResizeState.pointerId) {
+      return;
+    }
+
+    try {
+      if (rightPanelResizeHandle.hasPointerCapture(event.pointerId)) {
+        rightPanelResizeHandle.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+    }
+
+    rightPanelResizeState = null;
+    document.body.classList.remove("is-resizing-right-panel");
+  }
+
+  function handleRightPanelResizeKey(event) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setRightPanelStep(getRightPanelStepIndex() + 1);
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setRightPanelStep(getRightPanelStepIndex() - 1);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      setRightPanelStep(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      setRightPanelStep(getRightPanelWidthSteps().length - 1);
+    }
   }
 
   function getRoadCellFromPoint(point) {
@@ -508,6 +908,7 @@ export function createEditor() {
     roadTile.userData.pickable = false;
     scene.add(roadTile);
     roadTiles.set(key, roadTile);
+    markSceneOutlinerDirty();
     render();
     return { key, mesh: roadTile };
   }
@@ -718,6 +1119,9 @@ export function createEditor() {
     });
 
     copyCameraState(capturedCamera, camera);
+    capturedCamera.name = `Camera ${capturedCameraPreviews.length + 1}`;
+    capturedCamera.userData.assetType = "camera";
+    capturedCamera.userData.pickable = false;
 
     card.className = "camera-preview-card";
     card.style.setProperty("--preview-aspect-ratio", `${capturedAspect}`);
@@ -738,6 +1142,7 @@ export function createEditor() {
       height: 1,
       renderer: previewRenderer
     });
+    markSceneOutlinerDirty();
     render();
     return true;
   }
@@ -759,6 +1164,7 @@ export function createEditor() {
 
     configureAssetShadows(asset);
     placedAssets.push(asset);
+    markSceneOutlinerDirty();
     return asset;
   }
 
@@ -811,6 +1217,7 @@ export function createEditor() {
     }
 
     scene.remove(asset);
+    markSceneOutlinerDirty();
 
     if (selectedAsset === asset) {
       selectAsset(null);
@@ -829,6 +1236,7 @@ export function createEditor() {
       scene.add(asset);
     }
 
+    markSceneOutlinerDirty();
     selectAsset(asset);
   }
 
@@ -913,6 +1321,7 @@ export function createEditor() {
         scene.remove(tile.mesh);
         roadTiles.delete(tile.key);
       });
+      markSceneOutlinerDirty();
       render();
       return true;
     }
@@ -946,6 +1355,7 @@ export function createEditor() {
   function selectAsset(asset) {
     selectedAsset = asset;
     transformToolbar.hidden = !selectedAsset || isPlayModeActive();
+    markSceneOutlinerDirty();
 
     if (selectedAsset) {
       transformControls.attach(selectedAsset);
@@ -1011,7 +1421,7 @@ export function createEditor() {
     getPointerFromEvent(event);
     raycaster.setFromCamera(pointer, camera);
 
-    const hits = raycaster.intersectObjects(placedAssets, true);
+    const hits = raycaster.intersectObjects(getSelectableSceneObjects(), true);
     const selectableHit = hits.find((hit) => (
       hit.object.isMesh &&
       hit.object.userData.pickable !== false &&
@@ -1058,8 +1468,8 @@ export function createEditor() {
     }
 
     if (
-      Math.abs(groundPoint.x) > gridHalfSize ||
-      Math.abs(groundPoint.y) > gridHalfSize
+      Math.abs(groundPoint.x) > activeGridHalfSize ||
+      Math.abs(groundPoint.y) > activeGridHalfSize
     ) {
       return null;
     }
@@ -1315,6 +1725,8 @@ export function createEditor() {
     renderer.setRenderTarget(null);
     syncCameraProjection();
     syncSceneLights();
+    updateModelTransformPanel();
+    flushSceneOutliner();
     renderSceneToActiveViewport();
     selectionOutline.render(selectedAsset, selectionOutlineVisible);
     renderCapturedCameraPreviews();
@@ -1335,6 +1747,7 @@ export function createEditor() {
   }
 
   function resize() {
+    setRightPanelWidth(rightPanelWidth, { scheduleResize: false });
     const viewport = getViewportBounds();
 
     renderer.setSize(viewport.width, viewport.height);
@@ -1483,12 +1896,32 @@ export function createEditor() {
   cameraSpeedInput?.addEventListener("change", () => {
     setCameraMoveSpeed(cameraSpeedInput.value);
   });
-  rightPanelToggleButton?.addEventListener("click", () => {
-    setRightPanelCollapsed(!rightPanelCollapsed);
+  leftPanelTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setLeftPanelTab(tab.dataset.leftPanelTab);
+    });
   });
-  rightPanelWideToggleButton?.addEventListener("click", () => {
-    setRightPanelWide(!rightPanelWide);
+  rightPanelResizeHandle?.addEventListener("pointerdown", beginRightPanelResize);
+  rightPanelResizeHandle?.addEventListener("keydown", handleRightPanelResizeKey);
+  rightPanelResizeHandle?.addEventListener("dblclick", () => {
+    setRightPanelWidth(rightPanelDefaultWidth);
   });
+  sceneOutlinerList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-scene-outliner-item-id]");
+
+    if (button) {
+      selectSceneOutlinerItem(button.dataset.sceneOutlinerItemId);
+    }
+  });
+  ueRockSyncButton?.addEventListener("click", () => {
+    ueRockSync.sync().catch(() => {});
+  });
+  ueSemanticModeButton?.addEventListener("click", () => {
+    setImportedSceneDisplayMode(ueRockSync.getDisplayMode() === "semanticColor" ? "gray" : "semanticColor");
+  });
+  window.addEventListener("pointermove", updateRightPanelResize);
+  window.addEventListener("pointerup", endRightPanelResize);
+  window.addEventListener("pointercancel", endRightPanelResize);
   runButton?.addEventListener("click", () => {
     cancelRoadDrawingMode();
     togglePlayMode();
@@ -1546,6 +1979,7 @@ export function createEditor() {
 
     cameraControls.zoomView(event);
   }, { passive: false });
+  setRightPanelWidth(rightPanelWidth, { scheduleResize: false });
   refreshCameraSettingsUi();
   renderer.setAnimationLoop(tick);
   cameraControls.syncRotationFromCamera();

@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title></title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
     <style>
       html,
       body {
@@ -26,17 +25,12 @@
 
       :root {
         --side-panel-width: 320px;
-        --right-panel-collapsed-width: 52px;
+        --left-panel-rail-width: 52px;
+        --right-panel-min-width: 52px;
         --right-panel-default-width: 280px;
         --right-panel-width: var(--right-panel-default-width);
-        --right-panel-column-width: calc(var(--right-panel-default-width) - var(--right-panel-collapsed-width));
-        --right-panel-expanded-width: calc(
-          var(--right-panel-collapsed-width) +
-          var(--right-panel-column-width) +
-          var(--right-panel-column-width) +
-          var(--right-panel-column-width) +
-          var(--right-panel-column-width)
-        );
+        --right-panel-column-width: 228px;
+        --right-panel-handle-width: 10px;
         --editor-panel-bg: rgba(38, 38, 38, 0.96);
         --editor-panel-border: rgba(255, 255, 255, 0.12);
         --camera-preview-border-width: 3px;
@@ -61,12 +55,59 @@
         border-right: 1px solid var(--editor-panel-border);
       }
 
-      body.is-right-panel-wide {
-        --right-panel-width: var(--right-panel-expanded-width);
+      .left-panel-content {
+        box-sizing: border-box;
+        width: calc(100% - var(--left-panel-rail-width));
+        height: 100%;
+        overflow: auto;
       }
 
-      body.is-right-panel-collapsed {
-        --right-panel-width: var(--right-panel-collapsed-width);
+      .left-tab-rail {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        box-sizing: border-box;
+        width: var(--left-panel-rail-width);
+        padding: 8px 0;
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(24, 24, 24, 0.98);
+      }
+
+      .left-tab-rail sl-tooltip {
+        display: block;
+        width: 100%;
+      }
+
+      .left-tab-button::part(base),
+      .left-tab-button {
+        width: 100%;
+        height: 38px;
+        border-radius: 0;
+      }
+
+      .left-tab-button::part(base) {
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .left-tab-button::part(base):hover {
+        color: rgba(255, 255, 255, 0.98);
+      }
+
+      .left-tab-button.is-active {
+        background: var(--editor-panel-bg);
+        color: #ffffff;
+      }
+
+      .left-tab-button.is-active::part(base) {
+        color: #ffffff;
       }
 
       .settings-panel {
@@ -77,6 +118,197 @@
         width: 100%;
         padding: 14px;
         color: rgba(255, 255, 255, 0.88);
+      }
+
+      .settings-panel[hidden] {
+        display: none;
+      }
+
+      .model-transform-details[hidden],
+      .model-transform-empty[hidden] {
+        display: none;
+      }
+
+      .model-transform-empty {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 10px;
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 12px;
+      }
+
+      .model-transform-details {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .model-transform-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .model-transform-name {
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.25;
+      }
+
+      .model-transform-type {
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      .model-coordinate-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .model-coordinate-row {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        align-items: center;
+        min-height: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.16);
+        overflow: hidden;
+      }
+
+      .model-coordinate-axis {
+        display: grid;
+        height: 100%;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.66);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .model-coordinate-value {
+        padding: 0 8px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      .ue-rock-sync-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.14);
+      }
+
+      .ue-rock-sync-button {
+        width: 100%;
+        min-height: 32px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.92);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .ue-rock-sync-button:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .ue-rock-sync-button.is-active {
+        border-color: rgba(255, 255, 255, 0.26);
+        background: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+      }
+
+      .ue-rock-sync-button:disabled {
+        cursor: default;
+        opacity: 0.48;
+      }
+
+      .ue-rock-sync-status,
+      .ue-rock-sync-source,
+      .ue-rock-sync-meta {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .ue-rock-sync-source {
+        overflow-wrap: anywhere;
+      }
+
+      .ue-rock-sync-meta {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .scene-outliner-empty[hidden],
+      .scene-outliner-list[hidden] {
+        display: none;
+      }
+
+      .scene-outliner-empty {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 10px;
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 12px;
+      }
+
+      .scene-outliner-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-height: 0;
+      }
+
+      .scene-outliner-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.14);
+        color: rgba(255, 255, 255, 0.88);
+        padding: 0 8px;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .scene-outliner-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .scene-outliner-item.is-selected {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .scene-outliner-name {
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .scene-outliner-type {
+        color: rgba(255, 255, 255, 0.56);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        text-transform: uppercase;
       }
 
       .settings-heading {
@@ -140,44 +372,67 @@
         border-left: 1px solid var(--editor-panel-border);
       }
 
-      .right-panel-rail {
+      .right-ui-panel::before {
+        content: "";
         position: absolute;
         top: 0;
         bottom: 0;
         left: 0;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
+        width: var(--right-panel-min-width);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(24, 24, 24, 0.98);
+        pointer-events: none;
+      }
+
+      .right-panel-resize-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: calc(var(--right-panel-handle-width) * -0.5);
+        z-index: 3;
         box-sizing: border-box;
-        width: var(--right-panel-collapsed-width);
-        padding: 8px 6px;
-        border-right: 1px solid var(--editor-panel-border);
-        background: rgba(32, 32, 32, 0.9);
+        width: var(--right-panel-handle-width);
+        border: 0;
+        padding: 0;
+        background: transparent;
+        cursor: ew-resize;
+        touch-action: none;
       }
 
-      .right-panel-toggle,
-      .right-panel-toggle::part(base) {
-        width: 38px;
-        height: 38px;
-        border-radius: 6px;
+      .right-panel-resize-handle::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        z-index: 2;
+        width: 4px;
+        height: 56px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.24);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.24);
+        transform: translate(-50%, -50%);
       }
 
-      .right-panel-toggle::part(base) {
-        color: rgba(255, 255, 255, 0.78);
+      .right-panel-resize-handle:focus-visible {
+        outline: 1px solid rgba(255, 255, 255, 0.5);
+        outline-offset: 2px;
       }
 
-      .right-panel-toggle::part(base):hover {
-        background: rgba(255, 255, 255, 0.08);
-        color: #ffffff;
+      body.is-resizing-right-panel,
+      body.is-resizing-right-panel * {
+        cursor: ew-resize !important;
+        user-select: none;
       }
 
       .right-panel-content {
+        display: grid;
+        grid-template-columns: repeat(4, var(--right-panel-column-width));
+        grid-auto-rows: 100%;
         box-sizing: border-box;
         width: 100%;
         height: 100%;
-        padding-left: var(--right-panel-collapsed-width);
+        padding-left: var(--right-panel-min-width);
+        overflow: hidden;
       }
 
       .camera-preview-list {
@@ -190,24 +445,15 @@
       }
 
       .right-panel-secondary-column {
-        display: none;
+        display: block;
         box-sizing: border-box;
         min-width: 0;
         padding: 10px;
         border-left: 1px solid var(--editor-panel-border);
       }
 
-      body.is-right-panel-wide .right-panel-content {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(var(--right-panel-column-width), 1fr));
-      }
-
-      body.is-right-panel-wide .right-panel-secondary-column {
-        display: block;
-      }
-
-      body.is-right-panel-collapsed .right-panel-content,
-      body.is-right-panel-collapsed .camera-preview-list {
+      body.is-right-panel-minimized .right-panel-content,
+      body.is-right-panel-minimized .camera-preview-list {
         display: none;
       }
 
@@ -415,43 +661,191 @@
         }
       }
     </script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
     <script type="module" src="/__dev-reload.js"></script>
   </head>
   <body>
     <aside id="left-ui-panel" class="left-ui-panel" aria-label="left tools">
-      <section id="camera-settings-panel" class="settings-panel" aria-label="camera settings">
-        <h2 class="settings-heading">Camera</h2>
+      <div id="left-panel-content" class="left-panel-content">
+        <section
+          id="camera-settings-panel"
+          class="settings-panel"
+          data-left-panel-panel="camera"
+          role="tabpanel"
+          aria-label="camera settings"
+        >
+          <h2 class="settings-heading">Camera</h2>
 
-        <label class="settings-field" for="camera-fov-range">
-          <span class="settings-label-row">
-            <span>FOV</span>
-            <output id="camera-fov-value" class="settings-value" for="camera-fov-range">60</output>
-          </span>
-          <input
-            id="camera-fov-range"
-            class="camera-range"
-            type="range"
-            min="20"
-            max="100"
-            step="1"
-            value="60"
-          />
-        </label>
+          <label class="settings-field" for="camera-fov-range">
+            <span class="settings-label-row">
+              <span>FOV</span>
+              <output id="camera-fov-value" class="settings-value" for="camera-fov-range">60</output>
+            </span>
+            <input
+              id="camera-fov-range"
+              class="camera-range"
+              type="range"
+              min="20"
+              max="100"
+              step="1"
+              value="60"
+            />
+          </label>
 
-        <div class="settings-field">
-          <div class="settings-label-row">
-            <span>Runtime Aspect</span>
-            <span id="runtime-aspect-value" class="settings-value">16:9</span>
+          <div class="settings-field">
+            <div class="settings-label-row">
+              <span>Runtime Aspect</span>
+              <span id="runtime-aspect-value" class="settings-value">16:9</span>
+            </div>
+            <div class="aspect-preset-grid" aria-label="runtime aspect presets">
+              <button class="aspect-preset-button is-active" type="button" data-aspect-preset="16:9">16:9</button>
+              <button class="aspect-preset-button" type="button" data-aspect-preset="4:3">4:3</button>
+              <button class="aspect-preset-button" type="button" data-aspect-preset="1:1">1:1</button>
+              <button class="aspect-preset-button" type="button" data-aspect-preset="9:16">9:16</button>
+            </div>
           </div>
-          <div class="aspect-preset-grid" aria-label="runtime aspect presets">
-            <button class="aspect-preset-button is-active" type="button" data-aspect-preset="16:9">16:9</button>
-            <button class="aspect-preset-button" type="button" data-aspect-preset="4:3">4:3</button>
-            <button class="aspect-preset-button" type="button" data-aspect-preset="1:1">1:1</button>
-            <button class="aspect-preset-button" type="button" data-aspect-preset="9:16">9:16</button>
+        </section>
+        <section
+          id="model-edit-panel"
+          class="settings-panel"
+          data-left-panel-panel="model-edit"
+          role="tabpanel"
+          aria-label="model edit"
+          hidden
+        >
+          <h2 class="settings-heading">Model</h2>
+          <div id="model-transform-empty" class="model-transform-empty">未选择模型</div>
+          <div id="model-transform-details" class="model-transform-details" hidden>
+            <div class="model-transform-summary">
+              <div id="model-transform-name" class="model-transform-name">-</div>
+              <div id="model-transform-type" class="model-transform-type">Unreal Units (cm)</div>
+            </div>
+            <div class="model-coordinate-grid" aria-label="model location">
+              <div class="model-coordinate-row">
+                <span class="model-coordinate-axis">X</span>
+                <output id="model-location-x" class="model-coordinate-value">0 cm</output>
+              </div>
+              <div class="model-coordinate-row">
+                <span class="model-coordinate-axis">Y</span>
+                <output id="model-location-y" class="model-coordinate-value">0 cm</output>
+              </div>
+              <div class="model-coordinate-row">
+                <span class="model-coordinate-axis">Z</span>
+                <output id="model-location-z" class="model-coordinate-value">0 cm</output>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+        <section
+          id="terrain-panel"
+          class="settings-panel"
+          data-left-panel-panel="terrain"
+          role="tabpanel"
+          aria-label="terrain"
+          hidden
+        ></section>
+        <section
+          id="unreal5-panel"
+          class="settings-panel"
+          data-left-panel-panel="unreal5"
+          role="tabpanel"
+          aria-label="unreal 5"
+          hidden
+        >
+          <h2 class="settings-heading">UE</h2>
+          <div class="ue-rock-sync-card">
+            <button id="ue-rock-sync-button" class="ue-rock-sync-button" type="button" data-ue-rock-sync>
+              Sync Selected UE Scene Proxies
+            </button>
+            <button id="ue-semantic-mode-button" class="ue-rock-sync-button" type="button" data-ue-semantic-mode>
+              ID Color Mode
+            </button>
+            <div id="ue-rock-sync-status" class="ue-rock-sync-status">Ready to sync UE scene proxies</div>
+            <div id="ue-rock-sync-source" class="ue-rock-sync-source">/ue-sync/scene.manifest.json</div>
+            <div id="ue-semantic-rules-source" class="ue-rock-sync-source">/ue-sync/semantic.rules.json</div>
+            <div class="ue-rock-sync-meta">Synced actors: <span id="ue-rock-sync-count">0</span></div>
+          </div>
+        </section>
+        <section
+          id="scene-outliner-panel"
+          class="settings-panel"
+          data-left-panel-panel="scene-outliner"
+          role="tabpanel"
+          aria-label="scene outliner"
+          hidden
+        >
+          <h2 class="settings-heading">Scene</h2>
+          <div id="scene-outliner-empty" class="scene-outliner-empty">No scene elements</div>
+          <div id="scene-outliner-list" class="scene-outliner-list" aria-label="scene elements" hidden></div>
+        </section>
+      </div>
+      <nav
+        id="left-tab-rail"
+        class="left-tab-rail"
+        role="tablist"
+        aria-label="left panel tabs"
+        aria-orientation="vertical"
+      >
+        <sl-tooltip content="模型编辑" placement="right">
+          <sl-icon-button
+            id="left-model-edit-tab"
+            class="left-tab-button"
+            name="box"
+            data-left-panel-tab="model-edit"
+            label="模型编辑"
+            role="tab"
+            aria-selected="false"
+            aria-controls="model-edit-panel"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="地形" placement="right">
+          <sl-icon-button
+            id="left-terrain-tab"
+            class="left-tab-button"
+            name="map"
+            data-left-panel-tab="terrain"
+            label="地形"
+            role="tab"
+            aria-selected="false"
+            aria-controls="terrain-panel"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="虚幻5" placement="right">
+          <sl-icon-button
+            id="left-unreal5-tab"
+            class="left-tab-button"
+            name="unreal5"
+            data-left-panel-tab="unreal5"
+            label="虚幻5"
+            role="tab"
+            aria-selected="false"
+            aria-controls="unreal5-panel"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="场景大纲" placement="right">
+          <sl-icon-button
+            id="left-scene-outliner-tab"
+            class="left-tab-button"
+            name="list-tree"
+            data-left-panel-tab="scene-outliner"
+            label="场景大纲"
+            role="tab"
+            aria-selected="false"
+            aria-controls="scene-outliner-panel"
+          ></sl-icon-button>
+        </sl-tooltip>
+        <sl-tooltip content="Camera" placement="right">
+          <sl-icon-button
+            id="left-camera-tab"
+            class="left-tab-button is-active"
+            name="camera-video"
+            data-left-panel-tab="camera"
+            label="Camera"
+            role="tab"
+            aria-selected="true"
+            aria-controls="camera-settings-panel"
+          ></sl-icon-button>
+        </sl-tooltip>
+      </nav>
     </aside>
 
     <div id="asset-toolbar" class="asset-toolbar" aria-label="asset tools">
@@ -500,28 +894,17 @@
     <div id="drag-preview" class="drag-preview" aria-hidden="true"></div>
     <div id="play-viewport-frame" class="play-viewport-frame" aria-hidden="true"></div>
     <aside id="right-ui-panel" class="right-ui-panel" aria-label="right tools">
-      <div id="right-panel-rail" class="right-panel-rail" aria-label="right panel controls">
-        <sl-tooltip content="Collapse panel" placement="left">
-          <sl-icon-button
-            id="right-panel-toggle"
-            class="right-panel-toggle"
-            name="chevron-right"
-            data-panel-tool="toggle-right-panel"
-            label="Collapse right panel"
-            aria-expanded="true"
-          ></sl-icon-button>
-        </sl-tooltip>
-        <sl-tooltip content="统一展开" placement="left">
-          <sl-icon-button
-            id="right-panel-wide-toggle"
-            class="right-panel-toggle"
-            name="chevron-double-left"
-            data-panel-tool="toggle-right-panel-width"
-            label="统一展开"
-            aria-pressed="false"
-          ></sl-icon-button>
-        </sl-tooltip>
-      </div>
+      <div
+        id="right-panel-resize-handle"
+        class="right-panel-resize-handle"
+        role="separator"
+        aria-label="Resize right panel"
+        aria-orientation="vertical"
+        aria-valuemin="52"
+        aria-valuenow="280"
+        tabindex="0"
+        title="Resize right panel"
+      ></div>
       <div id="right-panel-content" class="right-panel-content">
         <div id="camera-preview-list" class="camera-preview-list" aria-label="captured camera previews"></div>
         <div
@@ -541,6 +924,7 @@
         ></div>
       </div>
     </aside>
+    <script type="module" src="/src/ui-components.js?v=local-ui"></script>
     <script type="module" src="/app.js?v=right-panel-wide"></script>
   </body>
 </html>
