@@ -3,3 +3,12 @@ __pycache__/
 .codegraph/
 _codex_state.md
 public/ue-sync/
+_commit_and_push.sh
+_commit_result.txt
+_git_diag.sh
+_git_diag_result.txt
+_cleanup_and_sync_main.sh
+_cleanup_result.txt
+CompositionPipeline.url
+open_homepage.bat
+start_server.bat
