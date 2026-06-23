@@ -752,7 +752,12 @@ assert.match(editor, /function\s+capturePlayerCamera/);
 assert.match(editor, /new\s+THREE\.PerspectiveCamera\(/);
 assert.match(editor, /const\s+uiCard\s*=\s*document\.createElement\(\s*["']div["']\s*\)/);
 assert.match(editor, /const\s+depthCanvas\s*=\s*document\.createElement\(\s*["']canvas["']\s*\)/);
-assert.match(editor, /const\s+depthRenderer\s*=\s*new\s+THREE\.WebGLRenderer\(\s*\{[\s\S]*canvas:\s*depthCanvas/);
+assert.match(editor, /const\s+previewRenderCanvas\s*=\s*document\.createElement\(\s*["']canvas["']\s*\)/);
+assert.match(editor, /const\s+depthRenderCanvas\s*=\s*document\.createElement\(\s*["']canvas["']\s*\)/);
+assert.match(editor, /const\s+sharedPreviewRenderer\s*=\s*new\s+THREE\.WebGLRenderer\(\s*\{[\s\S]*canvas:\s*previewRenderCanvas/);
+assert.match(editor, /const\s+sharedDepthRenderer\s*=\s*new\s+THREE\.WebGLRenderer\(\s*\{[\s\S]*canvas:\s*depthRenderCanvas/);
+assert.doesNotMatch(editor, /const\s+previewRenderer\s*=\s*new\s+THREE\.WebGLRenderer/);
+assert.doesNotMatch(editor, /const\s+depthRenderer\s*=\s*new\s+THREE\.WebGLRenderer/);
 assert.match(editor, /uiCard\.className\s*=\s*["']camera-ui-card["']/);
 assert.match(editor, /depthCanvas\.className\s*=\s*["']camera-depth-canvas["']/);
 assert.match(editor, /uiCard\.style\.setProperty\(\s*["']--preview-aspect-ratio["']/);
@@ -764,9 +769,16 @@ assert.match(editor, /uiCard\.append\(depthCanvas\)/);
 assert.match(editor, /cameraUiList\.append\(uiCard\)/);
 assert.match(editor, /uiCard:\s*uiCard/);
 assert.match(editor, /depthCanvas:\s*depthCanvas/);
-assert.match(editor, /depthRenderer:\s*depthRenderer/);
+assert.match(editor, /function\s+resizeCanvasBackingStore/);
+assert.match(editor, /function\s+copyRendererToCanvas/);
+assert.match(editor, /targetContext\.drawImage\(sourceRenderer\.domElement,\s*0,\s*0,\s*width,\s*height\)/);
+assert.match(editor, /copyRendererToCanvas\(sharedPreviewRenderer,\s*preview\.canvas,\s*preview\.canvasContext,\s*preview\.width,\s*preview\.height\)/);
+assert.match(editor, /copyRendererToCanvas\(sharedDepthRenderer,\s*preview\.depthCanvas,\s*preview\.depthContext,\s*preview\.width,\s*preview\.height\)/);
+assert.doesNotMatch(editor, /renderer:\s*previewRenderer/);
+assert.doesNotMatch(editor, /depthRenderer:\s*depthRenderer/);
 assert.match(editor, /function\s+renderDepthPreview/);
-assert.match(editor, /depthRenderer\.render\(scene,\s*preview\.camera\)/);
+assert.match(editor, /sharedDepthRenderer\.render\(scene,\s*preview\.camera\)/);
+assert.match(editor, /try\s*\{[\s\S]*scene\.overrideMaterial\s*=\s*cameraDepthMaterial[\s\S]*\}\s*finally\s*\{[\s\S]*scene\.overrideMaterial\s*=\s*previousOverrideMaterial[\s\S]*scene\.background\s*=\s*previousBackground/);
 assert.match(editor, /scene\.overrideMaterial\s*=\s*cameraDepthMaterial/);
 assert.match(editor, /cameraDepthMaterial\.uniforms\.cameraNear\.value\s*=\s*preview\.camera\.near/);
 assert.match(editor, /const\s+depthVisualizationRange\s*=\s*120/);
@@ -799,11 +811,14 @@ assert.doesNotMatch(
   "Captured cameras should not draw camera frustum or direction helper lines in the main viewport"
 );
 assert.match(editor, /function\s+renderCapturedCameraPreviews/);
-assert.match(editor, /preview\.renderer\.render\(scene,\s*preview\.camera\)/);
+assert.match(editor, /sharedPreviewRenderer\.render\(scene,\s*preview\.camera\)/);
+assert.doesNotMatch(editor, /preview\.renderer\.render\(scene,\s*preview\.camera\)/);
 assert.match(editor, /function\s+getPreviewRenderBounds/);
 assert.match(editor, /const\s+cameraAspect\s*=\s*preview\.aspect\s*\?\?\s*preview\.camera\.aspect/);
-assert.match(editor, /preview\.renderer\.setViewport\(/);
-assert.match(editor, /preview\.renderer\.setScissor\(/);
+assert.match(editor, /sharedPreviewRenderer\.setViewport\(/);
+assert.match(editor, /sharedPreviewRenderer\.setScissor\(/);
+assert.doesNotMatch(editor, /preview\.renderer\.setViewport\(/);
+assert.doesNotMatch(editor, /preview\.renderer\.setScissor\(/);
 assert.doesNotMatch(
   editor,
   /preview\.camera\.aspect\s*=\s*width\s*\/\s*height/,

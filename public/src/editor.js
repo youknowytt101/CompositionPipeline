@@ -62,6 +62,25 @@ export function createEditor() {
   document.body.appendChild(renderer.domElement);
 
   const selectionOutline = createSelectionOutline(renderer, camera);
+  const previewRenderCanvas = document.createElement("canvas");
+  const depthRenderCanvas = document.createElement("canvas");
+  const sharedPreviewRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    canvas: previewRenderCanvas,
+    preserveDrawingBuffer: true
+  });
+  const sharedDepthRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    canvas: depthRenderCanvas,
+    preserveDrawingBuffer: true
+  });
+
+  sharedPreviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  sharedPreviewRenderer.shadowMap.enabled = renderer.shadowMap.enabled;
+  sharedPreviewRenderer.shadowMap.type = renderer.shadowMap.type;
+  sharedPreviewRenderer.setClearColor(0x2b2b2b, 1);
+  sharedDepthRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  sharedDepthRenderer.setClearColor(0xffffff, 1);
 
   const environmentSettings = {
     color: new THREE.Color(0x8a9bb0),
@@ -1664,8 +1683,8 @@ export function createEditor() {
 
     preview.width = width;
     preview.height = height;
-    preview.renderer.setSize(width, height, false);
-    preview.depthRenderer?.setSize(width, height, false);
+    resizeCanvasBackingStore(preview.canvas, width, height);
+    resizeCanvasBackingStore(preview.depthCanvas, width, height);
     syncCameraUiCardLayout(preview.card, preview.uiCard);
   }
 
@@ -1706,6 +1725,30 @@ export function createEditor() {
     };
   }
 
+  function resizeCanvasBackingStore(canvas, width, height) {
+    if (!canvas) {
+      return;
+    }
+
+    if (canvas.width !== width) {
+      canvas.width = width;
+    }
+
+    if (canvas.height !== height) {
+      canvas.height = height;
+    }
+  }
+
+  function copyRendererToCanvas(sourceRenderer, targetCanvas, targetContext, width, height) {
+    if (!sourceRenderer || !targetCanvas || !targetContext) {
+      return;
+    }
+
+    resizeCanvasBackingStore(targetCanvas, width, height);
+    targetContext.clearRect(0, 0, width, height);
+    targetContext.drawImage(sourceRenderer.domElement, 0, 0, width, height);
+  }
+
   function renderCapturedCameraPreviews() {
     if (capturedCameraPreviews.length === 0) {
       return;
@@ -1718,64 +1761,71 @@ export function createEditor() {
       resizeCapturedCameraPreview(preview);
       const previewBounds = getPreviewRenderBounds(preview);
 
-      preview.renderer.setScissorTest(false);
-      preview.renderer.setViewport(0, 0, preview.width, preview.height);
-      preview.renderer.clear();
-      preview.renderer.setViewport(
+      sharedPreviewRenderer.setSize(preview.width, preview.height, false);
+      sharedPreviewRenderer.setScissorTest(false);
+      sharedPreviewRenderer.setViewport(0, 0, preview.width, preview.height);
+      sharedPreviewRenderer.clear();
+      sharedPreviewRenderer.setViewport(
         previewBounds.left,
         previewBounds.bottom,
         previewBounds.width,
         previewBounds.height
       );
-      preview.renderer.setScissor(
+      sharedPreviewRenderer.setScissor(
         previewBounds.left,
         previewBounds.bottom,
         previewBounds.width,
         previewBounds.height
       );
-      preview.renderer.setScissorTest(true);
-      preview.renderer.render(scene, preview.camera);
-      preview.renderer.setScissorTest(false);
+      sharedPreviewRenderer.setScissorTest(true);
+      sharedPreviewRenderer.render(scene, preview.camera);
+      sharedPreviewRenderer.setScissorTest(false);
+      copyRendererToCanvas(sharedPreviewRenderer, preview.canvas, preview.canvasContext, preview.width, preview.height);
       renderDepthPreview(preview, previewBounds);
     });
     transformControls.visible = transformControlsVisible;
   }
 
   function renderDepthPreview(preview, previewBounds) {
-    if (!preview.depthRenderer) {
+    if (!preview.depthCanvas || !preview.depthContext) {
       return;
     }
 
     const previousOverrideMaterial = scene.overrideMaterial;
     const previousBackground = scene.background;
 
-    cameraDepthMaterial.uniforms.cameraNear.value = preview.camera.near;
-    cameraDepthMaterial.uniforms.cameraFar.value = Math.min(preview.camera.far, depthVisualizationRange);
-    cameraDepthMaterial.uniforms.depthGamma.value = depthVisualizationGamma;
-    scene.overrideMaterial = cameraDepthMaterial;
-    scene.background = null;
+    try {
+      cameraDepthMaterial.uniforms.cameraNear.value = preview.camera.near;
+      cameraDepthMaterial.uniforms.cameraFar.value = Math.min(preview.camera.far, depthVisualizationRange);
+      cameraDepthMaterial.uniforms.depthGamma.value = depthVisualizationGamma;
+      scene.overrideMaterial = cameraDepthMaterial;
+      scene.background = null;
 
-    preview.depthRenderer.setScissorTest(false);
-    preview.depthRenderer.setViewport(0, 0, preview.width, preview.height);
-    preview.depthRenderer.clear();
-    preview.depthRenderer.setViewport(
-      previewBounds.left,
-      previewBounds.bottom,
-      previewBounds.width,
-      previewBounds.height
-    );
-    preview.depthRenderer.setScissor(
-      previewBounds.left,
-      previewBounds.bottom,
-      previewBounds.width,
-      previewBounds.height
-    );
-    preview.depthRenderer.setScissorTest(true);
-    preview.depthRenderer.render(scene, preview.camera);
-    preview.depthRenderer.setScissorTest(false);
+      sharedDepthRenderer.setSize(preview.width, preview.height, false);
+      sharedDepthRenderer.setScissorTest(false);
+      sharedDepthRenderer.setViewport(0, 0, preview.width, preview.height);
+      sharedDepthRenderer.clear();
+      sharedDepthRenderer.setViewport(
+        previewBounds.left,
+        previewBounds.bottom,
+        previewBounds.width,
+        previewBounds.height
+      );
+      sharedDepthRenderer.setScissor(
+        previewBounds.left,
+        previewBounds.bottom,
+        previewBounds.width,
+        previewBounds.height
+      );
+      sharedDepthRenderer.setScissorTest(true);
+      sharedDepthRenderer.render(scene, preview.camera);
+      sharedDepthRenderer.setScissorTest(false);
+    } finally {
+      scene.overrideMaterial = previousOverrideMaterial;
+      scene.background = previousBackground;
+    }
 
-    scene.overrideMaterial = previousOverrideMaterial;
-    scene.background = previousBackground;
+    copyRendererToCanvas(sharedDepthRenderer, preview.depthCanvas, preview.depthContext, preview.width, preview.height);
   }
 
   function capturePlayerCamera() {
@@ -1796,16 +1846,8 @@ export function createEditor() {
     const uiCard = document.createElement("div");
     const previewCanvas = document.createElement("canvas");
     const depthCanvas = document.createElement("canvas");
-    const previewRenderer = new THREE.WebGLRenderer({
-      antialias: true,
-      canvas: previewCanvas,
-      preserveDrawingBuffer: true
-    });
-    const depthRenderer = new THREE.WebGLRenderer({
-      antialias: true,
-      canvas: depthCanvas,
-      preserveDrawingBuffer: true
-    });
+    const previewContext = previewCanvas.getContext("2d");
+    const depthContext = depthCanvas.getContext("2d");
 
     copyCameraState(capturedCamera, camera);
     capturedCamera.name = `Camera ${capturedCameraPreviews.length + 1}`;
@@ -1824,24 +1866,18 @@ export function createEditor() {
     syncCameraUiCardLayout(card, uiCard);
 
     scene.add(capturedCamera);
-    previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    previewRenderer.shadowMap.enabled = renderer.shadowMap.enabled;
-    previewRenderer.shadowMap.type = renderer.shadowMap.type;
-    previewRenderer.setClearColor(0x2b2b2b, 1);
-    depthRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    depthRenderer.setClearColor(0xffffff, 1);
 
     capturedCameraPreviews.push({
       aspect: capturedAspect,
       card: card,
       camera: capturedCamera,
       canvas: previewCanvas,
+      canvasContext: previewContext,
       depthCanvas: depthCanvas,
-      depthRenderer: depthRenderer,
+      depthContext: depthContext,
       uiCard: uiCard,
       width: 1,
-      height: 1,
-      renderer: previewRenderer
+      height: 1
     });
     markSceneOutlinerDirty();
     render();
