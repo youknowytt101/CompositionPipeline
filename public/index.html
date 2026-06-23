@@ -251,6 +251,65 @@
         font-variant-numeric: tabular-nums;
       }
 
+      .local-setup-check-status {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .local-setup-check-results {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .local-setup-check-results[hidden] {
+        display: none;
+      }
+
+      .local-setup-check-item {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-left-width: 3px;
+        border-radius: 6px;
+        padding: 7px 8px;
+        background: rgba(0, 0, 0, 0.14);
+      }
+
+      .local-setup-check-item.is-ok {
+        border-left-color: #57a65a;
+      }
+
+      .local-setup-check-item.is-warning {
+        border-left-color: #d18b4b;
+      }
+
+      .local-setup-check-item.is-error {
+        border-left-color: #ff4d4d;
+      }
+
+      .local-setup-check-label,
+      .local-setup-check-message,
+      .local-setup-check-detail,
+      .local-setup-check-command {
+        display: block;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .local-setup-check-label {
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 650;
+      }
+
+      .local-setup-check-message {
+        color: rgba(255, 255, 255, 0.72);
+      }
+
+      .local-setup-check-detail,
+      .local-setup-check-command {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
       .scene-outliner-empty[hidden],
       .scene-outliner-list[hidden] {
         display: none;
@@ -759,10 +818,15 @@
             <button id="ue-semantic-mode-button" class="ue-rock-sync-button" type="button" data-ue-semantic-mode>
               ID Color Mode
             </button>
+            <button id="local-setup-check-button" class="ue-rock-sync-button" type="button" data-local-setup-check>
+              Check Local Setup
+            </button>
             <div id="ue-rock-sync-status" class="ue-rock-sync-status">Ready to sync UE scene proxies</div>
             <div id="ue-rock-sync-source" class="ue-rock-sync-source">/ue-sync/scene.manifest.json</div>
             <div id="ue-semantic-rules-source" class="ue-rock-sync-source">/ue-sync/semantic.rules.json</div>
             <div class="ue-rock-sync-meta">Synced actors: <span id="ue-rock-sync-count">0</span></div>
+            <div id="local-setup-check-status" class="local-setup-check-status">Local setup not checked</div>
+            <div id="local-setup-check-results" class="local-setup-check-results" hidden></div>
           </div>
         </section>
         <section

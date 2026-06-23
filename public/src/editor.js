@@ -213,6 +213,9 @@ export function createEditor() {
   const ueRockSyncStatus = document.querySelector("#ue-rock-sync-status");
   const ueRockSyncCount = document.querySelector("#ue-rock-sync-count");
   const ueSemanticModeButton = document.querySelector("#ue-semantic-mode-button");
+  const localSetupCheckButton = document.querySelector("#local-setup-check-button");
+  const localSetupCheckStatus = document.querySelector("#local-setup-check-status");
+  const localSetupCheckResults = document.querySelector("#local-setup-check-results");
   const playViewportFrame = document.querySelector("#play-viewport-frame");
   const fovRange = document.querySelector("#camera-fov-range");
   const fovValue = document.querySelector("#camera-fov-value");
@@ -689,6 +692,84 @@ export function createEditor() {
     }
 
     render();
+  }
+
+  function setLocalSetupCheckBusy(busy) {
+    if (localSetupCheckButton) {
+      localSetupCheckButton.disabled = busy;
+      localSetupCheckButton.textContent = busy ? "Checking..." : "Check Local Setup";
+    }
+  }
+
+  function createLocalSetupCheckItem(check) {
+    const status = ["ok", "warning", "error"].includes(check.status) ? check.status : "warning";
+    const item = document.createElement("div");
+    const label = document.createElement("span");
+    const message = document.createElement("span");
+
+    item.className = `local-setup-check-item is-${status}`;
+    label.className = "local-setup-check-label";
+    message.className = "local-setup-check-message";
+    label.textContent = check.label;
+    message.textContent = check.message;
+    item.append(label, message);
+
+    if (check.details) {
+      const details = document.createElement("span");
+
+      details.className = "local-setup-check-detail";
+      details.textContent = check.details;
+      item.append(details);
+    }
+
+    if (check.command) {
+      const command = document.createElement("span");
+
+      command.className = "local-setup-check-command";
+      command.textContent = check.command;
+      item.append(command);
+    }
+
+    return item;
+  }
+
+  function renderLocalSetupChecks(payload) {
+    if (localSetupCheckStatus) {
+      localSetupCheckStatus.textContent = payload.summary || "Local setup checked";
+    }
+
+    if (!localSetupCheckResults) {
+      return;
+    }
+
+    const checks = Array.isArray(payload.checks) ? payload.checks : [];
+
+    localSetupCheckResults.hidden = checks.length === 0;
+    localSetupCheckResults.replaceChildren(...checks.map(createLocalSetupCheckItem));
+  }
+
+  function renderLocalSetupCheckFailure(error) {
+    if (localSetupCheckStatus) {
+      localSetupCheckStatus.textContent = `Local setup check failed: ${error.message || error}`;
+    }
+  }
+
+  async function runLocalSetupCheck() {
+    setLocalSetupCheckBusy(true);
+
+    try {
+      const response = await fetch("/api/environment-check", { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      renderLocalSetupChecks(await response.json());
+    } catch (error) {
+      renderLocalSetupCheckFailure(error);
+    } finally {
+      setLocalSetupCheckBusy(false);
+    }
   }
 
   function adaptImportedSceneToManifest(manifest) {
@@ -1919,6 +2000,7 @@ export function createEditor() {
   ueSemanticModeButton?.addEventListener("click", () => {
     setImportedSceneDisplayMode(ueRockSync.getDisplayMode() === "semanticColor" ? "gray" : "semanticColor");
   });
+  localSetupCheckButton?.addEventListener("click", runLocalSetupCheck);
   window.addEventListener("pointermove", updateRightPanelResize);
   window.addEventListener("pointerup", endRightPanelResize);
   window.addEventListener("pointercancel", endRightPanelResize);
